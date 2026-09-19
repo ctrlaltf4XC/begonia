@@ -28,32 +28,6 @@
 #include <cstdint>
 #include <cstring>
 
-namespace {
-
-template <typename T>
-inline void assign_key_material(T* req, const uint8_t* key, size_t len) {
-    req->key_data = keymaster::KeymasterKeyBlob(key, len);
-}
-
-inline void assign_wrapped(keymaster::ImportWrappedKeyRequest* req,
-                           const uint8_t* data, size_t len, uint32_t which) {
-    switch (which) {
-        case 0:
-            req->wrapped_key_data = keymaster::KeymasterKeyBlob(data, len);
-            break;
-        case 1:
-            req->wrapping_key_data = keymaster::KeymasterKeyBlob(data, len);
-            break;
-        case 2:
-            req->masking_key_data = keymaster::KeymasterKeyBlob(data, len);
-            break;
-        default:
-            break;
-    }
-}
-
-}  // namespace
-
 extern "C" {
 
 /* ------------------------------------------------------------------ */
@@ -81,37 +55,37 @@ void _ZN9keymaster16AuthorizationSetD2Ev() {}
 
 void _ZN9keymaster16ImportKeyRequest14SetKeyMaterialEPKvm(
         keymaster::ImportKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16ExportKeyRequest14SetKeyMaterialEPKvm(
         keymaster::ExportKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16AttestKeyRequest14SetKeyMaterialEPKvm(
         keymaster::AttestKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16DeleteKeyRequest14SetKeyMaterialEPKvm(
         keymaster::DeleteKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster17UpgradeKeyRequest14SetKeyMaterialEPKvm(
         keymaster::UpgradeKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster21BeginOperationRequest14SetKeyMaterialEPKvm(
         keymaster::BeginOperationRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster28GetKeyCharacteristicsRequest14SetKeyMaterialEPKvm(
         keymaster::GetKeyCharacteristicsRequest* t, const uint8_t* k, size_t l) {
-    assign_key_material(t, k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,17 +94,17 @@ void _ZN9keymaster28GetKeyCharacteristicsRequest14SetKeyMaterialEPKvm(
 
 void _ZN9keymaster23ImportWrappedKeyRequest18SetWrappedMaterialEPKvm(
         keymaster::ImportWrappedKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_wrapped(t, k, l, 0);
+    t->wrapped_key = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster23ImportWrappedKeyRequest19SetWrappingMaterialEPKvm(
         keymaster::ImportWrappedKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_wrapped(t, k, l, 1);
+    t->wrapping_key = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster23ImportWrappedKeyRequest21SetMaskingKeyMaterialEPKvm(
         keymaster::ImportWrappedKeyRequest* t, const uint8_t* k, size_t l) {
-    assign_wrapped(t, k, l, 2);
+    t->masking_key = keymaster::KeymasterKeyBlob(k, l);
 }
 
 }  /* extern "C" */
