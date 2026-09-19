@@ -26,13 +26,13 @@
 /vendor            emmc     /dev/block/platform/bootdevice/by-name/vendor       flags=display="Vendor (raw)";backup=1;flashimg=1
 
 # --- Filesystem view ------------------------------------------------------------
-/system_root       ext4     /dev/block/platform/bootdevice/by-name/system       flags=display="System";backup=1;wipeingui
-/vendor            ext4     /dev/block/platform/bootdevice/by-name/vendor       flags=display="Vendor";backup=1;wipeingui
-/product           ext4     /dev/block/mapper/product                          flags=display="Product";backup=1;wipeingui
-/system_ext        ext4     /dev/block/mapper/system_ext                       flags=display="System Ext";backup=1;wipeingui
-/odm               ext4     /dev/block/mapper/odm                              flags=display="ODM";backup=1;wipeingui
+# Note: TWRP resolves the logical partitions in /super through the fstab, NOT
+# through twrp.flags. Listing them here with mapper paths would break backup on
+# non-dynamic firmware, so only the physical by-name devices are declared.
+/system_root      ext4     /dev/block/platform/bootdevice/by-name/system       flags=display="System";backup=1;wipeingui
+/vendor           ext4     /dev/block/platform/bootdevice/by-name/vendor       flags=display="Vendor";backup=1;wipeingui
 
-/cache             ext4     /dev/block/platform/bootdevice/by-name/cache        flags=backup=1;display="Cache";wipeingui
+/cache            ext4     /dev/block/platform/bootdevice/by-name/cache        flags=backup=1;display="Cache";wipeingui
 # --- MediaTek / vendor factory partitions ---------------------------------------
 /metadata         ext4     /dev/block/platform/bootdevice/by-name/metadata     flags=backup=1;display="Metadata"
 /persist          ext4     /dev/block/platform/bootdevice/by-name/persist      flags=backup=1;display="Persist"

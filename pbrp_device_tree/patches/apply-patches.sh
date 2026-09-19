@@ -5,12 +5,14 @@
 # Applies the small set of source modifications that the begonia PBRP tree
 # needs on top of a clean PBRP android-12.1 checkout:
 #
-#   1. Allow TWRP to resolve RETROFIT dynamic partitions (super built on the
-#      physical system+vendor partitions) instead of only a native /super.
-#   2. Teach the fstab parser that a "logical" entry with no super present
-#      must silently fall back to the by-name block device, so the same
-#      recovery image works on non-dynamic stock firmware.
-#   3. Make the FBE wrapped-key path accept the beanpod keymaster@4.0 HAL.
+#   1. Let TWRP find the RETROFIT super on begonia, where the super metadata
+#      lives in the physical "system" partition instead of a "super" one.
+#   2. Make the FBE wrapped-key path accept the beanpod keymaster@4.0 HAL.
+#
+# Partition layout is NOT handled by patching: TWRP's Prepare_Super_Volume()
+# busy-waits on an unresolvable logical device with no timeout, so a "logical"
+# fstab entry on non-dynamic firmware hangs recovery. Two fstab variants are
+# shipped instead (variants/) and one is selected via select-fstab.sh.
 #
 # Every patch is idempotent: running twice is a no-op.
 #
@@ -34,41 +36,58 @@ if [ -f "$PM" ]; then
     if marker_present "BEGONIA_RETROFIT_SUPER" "$PM"; then
         echo "already applied"
     else
-        # TWRP looks for a partition named "super". On a retrofit device the
-        # super metadata is stored in the physical "system" partition, so we
-        # alias it. This is exactly how AOSP's fs_mgr handles
-        # "androidboot.super_partition=system".
+        # TWRP resolves the super via:
+        #     std::string TWPartitionManager::Get_Super_Partition() {
+        #         int slot_number = Get_Active_Slot_Display() == "A" ? 0 : 1;
+        #         std::string super_device = fs_mgr_get_super_partition_name(slot_number);
+        #         return "/dev/block/by-name/" + super_device;
+        #     }
+        # and everything else keys off access() on that path. On begonia there
+        # is no "super" partition: the super is a retrofit built onto the
+        # system+vendor extents and the bootloader announces it via
+        # androidboot.super_partition=system. Rewrite the returned path to the
+        # by-name node the kernel actually exposes, so Get_Super_Status(),
+        # Setup_Super_Devices() and CreateLogicalPartitions() all work.
         python3 - "$PM" <<'PY'
-import re, sys, pathlib
+import sys, pathlib
 p = pathlib.Path(sys.argv[1])
 s = p.read_text()
-needle = "void PartitionManager::Setup_Super_Devices()"
+
+needle = "std::string TWPartitionManager::Get_Super_Partition() {"
 if needle not in s:
-    needle = "bool PartitionManager::Prepare_Super_Volume"
-if needle not in s:
-    print("  ! anchor not found, skipping")
+    print("  ! Get_Super_Partition() anchor not found, skipping")
     sys.exit(0)
-inject = '''
-/* BEGONIA_RETROFIT_SUPER
- * begonia has no physical /super partition. Android 11+ ROMs build a
+
+old_tail = 'return "/dev/block/by-name/" + super_device;'
+if old_tail not in s:
+    print("  ! return statement anchor not found, skipping")
+    sys.exit(0)
+
+inject = '''/* BEGONIA_RETROFIT_SUPER
+ * begonia has no physical super partition. Android 11..16 ROMs build a
  * RETROFIT super on top of the physical system+vendor extents and the
- * bootloader passes androidboot.super_partition=system. Alias the physical
- * partition so TWRP's super handling picks it up, while leaving the
- * non-dynamic (Android 9/10) path untouched.
+ * bootloader passes androidboot.super_partition=system. The kernel exposes it
+ * as a by-name node named after that argument, so translate the generic
+ * "super" name to it. On a device that really has a super partition the
+ * plain path is used, so nothing changes for non-dynamic firmware.
  */
-static std::string begonia_super_device() {
-    std::string cmd = "/dev/block/platform/bootdevice/by-name/";
-    if (TWFunc::Path_Exists(cmd + "super"))
-        return cmd + "super";
-    if (TWFunc::Path_Exists(cmd + "system"))
-        return cmd + "system";
-    return "";
+static std::string begonia_super_partition_path(const std::string& candidate) {
+    const char* kBy = "/dev/block/platform/bootdevice/by-name/";
+    if (TWFunc::Path_Exists(candidate))
+        return candidate;
+    if (TWFunc::Path_Exists(std::string(kBy) + "system"))
+        return std::string(kBy) + "system";
+    return candidate;
 }
 '''
+
 idx = s.find(needle)
 s = s[:idx] + inject + s[idx:]
+
+# Wrap the return value through the helper.
+s = s.replace(old_tail, "return begonia_super_partition_path(\"/dev/block/by-name/\" + super_device);", 1)
 p.write_text(s)
-print("  + injected helper into partitionmanager.cpp")
+print("  + patched Get_Super_Partition() for retrofit super")
 PY
     fi
 else
@@ -76,39 +95,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 2. fstab: tolerate logical entries when no super exists
+# 2. (removed)
+#
+# An earlier revision patched partition.cpp to make a "logical" fstab entry
+# fall back to the physical by-name device. That was wrong: TWRP's
+# TWPartitionManager::Prepare_Super_Volume() drops the partition and then
+# busy-waits on access() with no timeout, so patching it that way hides a
+# hang instead of fixing it.
+#
+# The correct fix, implemented in this tree, is to ship two fstab variants and
+# select one at build time (variants/recovery.fstab.static /.dynamic via
+# select-fstab.sh). Nothing to patch here.
 # ---------------------------------------------------------------------------
-say "2. fstab logical fallback"
-
-PART="bootable/recovery/partition.cpp"
-if [ -f "$PART" ]; then
-    if marker_present "BEGONIA_LOGICAL_FALLBACK" "$PART"; then
-        echo "already applied"
-    else
-        python3 - "$PART" <<'PY'
-import sys, pathlib
-p = pathlib.Path(sys.argv[1])
-s = p.read_text()
-anchor = "if (!Is_SubPartition(Mount_Point)"
-if anchor not in s:
-    print("  ! anchor not found, skipping")
-    sys.exit(0)
-inject = '''            /* BEGONIA_LOGICAL_FALLBACK
-             * A fstab entry flagged "logical" refers to a device-mapper
-             * partition inside /super. On non-dynamic begonia firmware no
-             * super exists, so fall through to the physical by-name node
-             * instead of failing the mount.
-             */
-'''
-idx = s.find(anchor)
-s = s[:idx] + inject + s[idx:]
-p.write_text(s)
-print("  + annotated logical fallback path")
-PY
-    fi
-else
-    echo "WARNING: $PART not found"
-fi
+say "2. fstab variants (no source patch needed)"
+echo "handled by variants/recovery.fstab.{static,dynamic} + select-fstab.sh"
 
 # ---------------------------------------------------------------------------
 # 3. Beanpod keymaster acceptance in the FBE path

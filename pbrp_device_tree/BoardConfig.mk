@@ -135,23 +135,36 @@ BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE := 1610612736
 #
 # begonia has no native "super" partition, so Android 11+ ROMs use RETROFIT
 # dynamic partitions: a super built on top of the "system" and "vendor"
-# physical partitions. These variables let the recovery understand, resize
-# and flash such a layout, while bare system/vendor flashing (non-dynamic)
-# keeps working through the by-name fstab entries.
+# physical partitions. These values match the layout used by the maintained
+# begonia ROM trees, so recovery can map, resize and flash them correctly.
 # ----------------------------------------------------------------------------
-BOARD_SUPER_PARTITION_BLOCK_DEVICES := system vendor
+SSI_PARTITIONS := product system system_ext
+TREBLE_PARTITIONS := odm vendor
+ALL_PARTITIONS := $(SSI_PARTITIONS) $(TREBLE_PARTITIONS)
+
+# Every dynamic partition is ext4 in recovery's view
+$(foreach p, $(call to-upper, $(ALL_PARTITIONS)), \
+    $(eval BOARD_$(p)IMAGE_FILE_SYSTEM_TYPE := ext4) \
+    $(eval TARGET_COPY_OUT_$(p) := $(call to-lower, $(p))))
+
+$(foreach p, $(call to-upper, $(SSI_PARTITIONS)), \
+    $(eval BOARD_$(p)IMAGE_EXTFS_INODE_COUNT := -1))
+$(foreach p, $(call to-upper, $(TREBLE_PARTITIONS)), \
+    $(eval BOARD_$(p)IMAGE_EXTFS_INODE_COUNT := 4096))
+
+$(foreach p, $(call to-upper, $(SSI_PARTITIONS)), \
+    $(eval BOARD_$(p)IMAGE_PARTITION_RESERVED_SIZE := 83886080)) # 80 MB
+$(foreach p, $(call to-upper, $(TREBLE_PARTITIONS)), \
+    $(eval BOARD_$(p)IMAGE_PARTITION_RESERVED_SIZE := 41943040)) # 40 MB
+
+BOARD_SUPER_PARTITION_BLOCK_DEVICES := vendor system
 BOARD_SUPER_PARTITION_METADATA_DEVICE := system
 BOARD_SUPER_PARTITION_GROUPS := xiaomi_dynamic_partitions
-BOARD_SUPER_PARTITION_SIZE := 5368709120
-BOARD_XIAOMI_DYNAMIC_PARTITIONS_PARTITION_LIST := system product system_ext vendor odm
-BOARD_XIAOMI_DYNAMIC_PARTITIONS_SIZE := 5364514816
-
-# Reserved space so images of any filesystem generation fit
-BOARD_ODMIMAGE_PARTITION_RESERVED_SIZE := 30720000
-BOARD_PRODUCTIMAGE_PARTITION_RESERVED_SIZE := 536870912
-BOARD_SYSTEMIMAGE_PARTITION_RESERVED_SIZE := 201326592
-BOARD_SYSTEM_EXTIMAGE_PARTITION_RESERVED_SIZE := 536870912
-BOARD_VENDORIMAGE_PARTITION_RESERVED_SIZE := 30720000
+BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE := 1610612736
+BOARD_SUPER_PARTITION_SYSTEM_DEVICE_SIZE := 3758096384
+BOARD_SUPER_PARTITION_SIZE := $(shell expr $(BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE) + $(BOARD_SUPER_PARTITION_SYSTEM_DEVICE_SIZE))
+BOARD_XIAOMI_DYNAMIC_PARTITIONS_PARTITION_LIST := odm product system system_ext vendor
+BOARD_XIAOMI_DYNAMIC_PARTITIONS_SIZE := $(shell expr $(BOARD_SUPER_PARTITION_SIZE) - 4194304)
 
 # ----------------------------------------------------------------------------
 # Filesystems (recovery must READ and WRITE all of these)
@@ -165,18 +178,14 @@ TARGET_USERIMAGES_USE_F2FS := true
 TARGET_USES_MKE2FS := true
 
 BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
-BOARD_USERDATAIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_USERDATAIMAGE_FILE_SYSTEM_TYPE := f2fs
 
 # EROFS read support (Android 13/14/15/16 system images)
+# Recovery must be able to *read* erofs even though the dynamic partitions
+# above are declared ext4, because A16 ROMs ship erofs system/vendor images.
 BOARD_EROFS_COMPRESSOR := lz4hc
 BOARD_EROFS_USE_ZTAILPACKING := true
 BOARD_EROFS_PCLUSTER_SIZE := 262144
-
-# Copy-out paths matching both layouts
-TARGET_COPY_OUT_VENDOR := vendor
-TARGET_COPY_OUT_PRODUCT := product
-TARGET_COPY_OUT_SYSTEM_EXT := system_ext
-TARGET_COPY_OUT_ODM := odm
 
 # ----------------------------------------------------------------------------
 # Properties

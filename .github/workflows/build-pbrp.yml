@@ -27,6 +27,14 @@ on:
           - recoveryimage
           - pbrp
           - bootimage
+      fstab_variant:
+        description: "Partition layout: static = non-dynamic/Android 9-10 (safe default), dynamic = retrofit /super for Android 11-16"
+        required: true
+        default: "static"
+        type: choice
+        options:
+          - static
+          - dynamic
   push:
     branches:
       - main
@@ -117,6 +125,15 @@ jobs:
           cp -a "../device-tree/$DEVICE_TREE" "$DEVICE_PATH"
           ls -la "$DEVICE_PATH"
 
+      - name: Select fstab variant
+        env:
+          FSTAB_VARIANT: ${{ github.event.inputs.fstab_variant || 'static' }}
+        run: |
+          cd android
+          bash "$DEVICE_PATH/select-fstab.sh" "$FSTAB_VARIANT"
+          echo "--- active recovery.fstab (non-comment entries) ---"
+          grep -vE '^\s*#' "$DEVICE_PATH/recovery/root/system/etc/recovery.fstab" | grep -v '^$'
+
       - name: Apply begonia patches
         run: |
           cd android
@@ -170,6 +187,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pbrp-begonia-${{ github.run_number }}
+          name: pbrp-begonia-${{ github.event.inputs.fstab_variant || 'static' }}-${{ github.run_number }}
           path: out/*
           if-no-files-found: warn

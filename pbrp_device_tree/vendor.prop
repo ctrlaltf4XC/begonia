@@ -3,6 +3,8 @@
 #
 
 # Crypto / FBE v2 (Android 12 .. Android 16)
+#
+# Values verified against the working upstream begonia FBE v2 tree.
 ro.crypto.allow_encrypt_override=true
 ro.crypto.dm_default_key.options_format.version=2
 ro.crypto.volume.metadata.method=dm-default-key

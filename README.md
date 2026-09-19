@@ -8,14 +8,44 @@ The single recovery image produced by this tree supports:
 
 | Capability | Status |
 |---|---|
-| **Non-dynamic partitions** (stock Android 9/10 firmware) | yes |
-| **Retrofit dynamic partitions** (`/super` over system+vendor, Android 11 to 16) | yes |
+| **Non-dynamic partitions** (stock Android 9/10 firmware) — build variant `static` | yes |
+| **Retrofit dynamic partitions** (`/super` over system+vendor, Android 11 to 16) — build variant `dynamic` | yes |
 | **FDE** — full-disk encryption, AES-256-XTS (Android 9) | yes |
 | **FBE v1** — file-based encryption (Android 10/11) | yes |
 | **FBE v2** — metadata-based FBE (Android 12+) | yes |
 | **FBE with hardware wrapped keys** — MicroTrust TEE (Android 13 to 16) | yes |
 | Reading **ext4 / f2fs / erofs / exFAT / NTFS** | yes |
 | **Android 16 (LineageOS 23 / AOSP 16) ROMs** | yes |
+
+> **Important — two images, not one.**
+> TWRP's `TWPartitionManager::Prepare_Super_Volume()` lists a `logical` fstab
+> entry like this:
+> ```
+>     if (partition->Is_Super && !Prepare_Super_Volume(partition))
+>         goto clear;                       // partition dropped
+>     while (access(fstabEntry.blk_device.c_str(), F_OK) != 0) {
+>         usleep(100);                      // NO TIMEOUT
+>     }
+> ```
+> On begonia there is no physical `super` partition, so a `logical` entry on
+> stock Android 9/10 firmware would enter an **infinite busy-wait**. That is why
+> the same fstab cannot serve both layouts and why upstream ships **two separate
+> recovery images** (`dynamic` and base/`fbev2`), not one.
+>
+> This project therefore ships **two fstab variants** in `variants/` and
+> selects one at build time via `select-fstab.sh`, producing two recovery
+> variants:
+>
+> | Variant | fstab | When to flash |
+> |---|---|---|
+> | `static` (default) | by-name system/vendor | Stock Android 9/10, and the **safe default** for Android 11..16 (by-name system/vendor are the super backing extents; PBRP's lptools handles the super itself) |
+> | `dynamic` | logical system/system_ext/product/vendor/odm | Required to **flash / install** Android 11..16 ROMs |
+>
+> On startup the `static` image uses `by-name/system` and `by-name/vendor` as the
+> physical extents backing the retrofit `/super`. PBRP's PARTITION_* super handling
+> (via `Get_Super_Partition()` patched in `patches/apply-patches.sh`) locates the
+> by-name super node when `androidboot.super_partition=system` is present, so
+> lptools can read/resize/flash the super area during a dynamic ROM install.
 
 ---
 
@@ -35,8 +65,10 @@ pbrp_device_tree/                    <- copy to device/xiaomi/begonia
 │   ├── dtbo.img                     device tree overlay
 │   └── dtb/mtk.dtb                  device tree blob
 ├── libshim_beanpod/                 ABI shim for the TEE keymaster HAL
-├── patches/apply-patches.sh         upstream source patches (idempotent)
-├── recovery/root/
+├── variants/
+│   ├── recovery.fstab.static    [DEFAULT] by-name system/vendor — Android 9/10 + safe Android 11..16
+│   ├── recovery.fstab.dynamic   logical system/system_ext/product/vendor/odm — Android 11..16
+│   └── select-fstab.sh          picks the fstab variant before build
 │   ├── init.recovery.mt6785.rc      main recovery init
 │   ├── init.begonia.rc              layout detection hook
 │   ├── init.recovery.usb.rc         USB gadget config
@@ -82,23 +114,22 @@ The default build target is **`android-12.1`** (PBRP 4.0 / TWRP 3.7.1_12), which
 is the newest *stable, maintained* PBRP branch and already contains the FBE v2,
 wrapped-key and lptools code paths. The workflow also offers `android-14.0`.
 
-### How one image handles both partition layouts
+### How the two images handle the different layouts
 
 begonia shipped with Android 9 (non-dynamic). Android 11+ ROMs retrofit a
 `/super` onto the existing `system`+`vendor` extents.
 
-`recovery.fstab` declares **both**:
+`variants/recovery.fstab.dynamic` declares system, vendor, product, system_ext
+and odm with the `logical` flag → resolved through device-mapper when a super
+exists. That variant must be flashed when installing/flashing Android 11..16.
 
-* `system`, `vendor`, `product`, `system_ext`, `odm` with the `logical` flag →
-  resolved through device-mapper when a super exists.
-* `/dev/block/platform/bootdevice/by-name/system` and `.../vendor` → used
-  directly when there is no super.
-
-Because a missing logical device simply makes that entry un-mountable while the
-physical entry still resolves, **the same image boots and flashes on both**.
-
-In addition `sbin/begonia-layout-detect.sh` probes at runtime (kernel cmdline,
-`/dev/block/mapper`, LP metadata magic) and publishes `ro.begonia.layout`.
+`variants/recovery.fstab.static` (the default) uses only `by-name/system` and
+`by-name/vendor` physical entries. This is safe on stock Android 9/10 **and**
+on Android 11..16: there, `by-name/system` is the /super backing extent, and
+PBRP's patched `Get_Super_Partition()` locates the by-name super node when
+`androidboot.super_partition=system` is present, so lptools can read/resize the
+super during a dynamic ROM install — while `by-name/system` still works for
+plain flashing on static ROMs.
 
 ### Decryption
 
