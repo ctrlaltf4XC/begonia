@@ -1,0 +1,3 @@
+require version-bootloader=*
+require version-baseband=*
+require version-modem=*

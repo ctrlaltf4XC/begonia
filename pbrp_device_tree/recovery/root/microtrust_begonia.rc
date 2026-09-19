@@ -1,0 +1,105 @@
+# MicroTrust TEE (beanpod) configuration for begonia / MT6785
+#
+# teei_daemon loads the Trusted Applications required by the keymaster and
+# gatekeeper HALs. Without it, HKDF-unwrapping of the FBE wrapped key fails
+# and /data cannot be decrypted on Android 13+ (and on 10/11/12 as well).
+
+service teei_daemon /vendor/bin/teei_daemon \
+    -r 020b0000000000000000000000000000 \
+    -r 020f0000000000000000000000000000 \
+    -r 06090000000000000000000000000000 \
+    -r 05120000000000000000000000000000 \
+    -r 40188311faf343488db888ad39496f9a \
+    -r 07060000000000000000000000007169 \
+    -r 4be4f7dc1f2c11e5b5f7727283247c7f \
+    -r 9073f03a9618383bb1856eb3f990babd \
+    -r 08050000000000000000000000003419 \
+    -r 5020170115e016302017012521300000 \
+    -r 0f5eed3c3b5a47afacca69a84bf0efad \
+    -r 07407000000000000000000000000000 \
+    -r 05160000000000000000000000000000 \
+    -r 91dba524a6e24909acc48abd7163121a \
+    -r 57f02fe81d5a11ea8d23d7abe98b8462 \
+    -r 08070000000000000000000000008270 \
+    -r 09080000000000000000000000009381 \
+    -t 08030000000000000000000000000000 \
+    -t 85f630e0f0964c5fa2cc268ce04e3da3 \
+    -t 98fb95bcb4bf42d26473eae48690d7ea \
+    -t 7b66512021214487ba710a51d7ea78fe \
+    -t 09010000000000000000000000000000
+    class core
+    user system
+    group system
+    seclabel u:r:recovery:s0
+    disabled
+
+on boot
+    chown system system /sys/bus/platform/devices/utos/dcih_notify_test
+    chown system system /sys/bus/platform/devices/utos/dcih_wait_notify_test
+    chown system system /sys/bus/platform/devices/utos/load_ut_drv
+    chown system system /sys/bus/platform/devices/utos/unload_ut_drv
+    chown system system /sys/bus/platform/devices/utos/notify_ree_dci_handler
+
+# TEE shared-memory directory layout. Requires /data to be mounted, so this is
+# moved onto post-fs-data instead of load_persist_props_action which runs far
+# too early in recovery to be useful (and spams mkdir failures).
+on post-fs-data
+    mkdir /data/vendor/thh 0755 system system
+    mkdir /data/vendor/thh/system 0755 system system
+    mkdir /data/vendor/thh/ta 0755 system system
+    mkdir /data/vendor/thh/tee 0755 system system
+    mkdir /data/vendor/thh/tee/tas 0755 system system
+    mkdir /data/vendor/thh/tee_log 0755 system system
+    mkdir /data/vendor/thh/tee_00 0755 system system
+    mkdir /data/vendor/thh/tee_01 0755 system system
+    mkdir /data/vendor/thh/tee_02 0755 system system
+    mkdir /data/vendor/thh/tee_03 0755 system system
+    mkdir /data/vendor/thh/tee_04 0755 system system
+    mkdir /data/vendor/thh/tee_05 0755 system system
+    mkdir /data/vendor/thh/tee_06 0755 system system
+    mkdir /data/vendor/thh/tee_07 0755 system system
+    mkdir /data/vendor/thh/tee_08 0755 system system
+    mkdir /data/vendor/thh/tee_09 0755 system system
+    mkdir /data/vendor/thh/tee_0A 0755 system system
+    mkdir /data/vendor/thh/tee_0B 0755 system system
+    mkdir /data/vendor/thh/tee_0C 0755 system system
+    mkdir /data/vendor/thh/tee_0D 0755 system system
+    mkdir /data/vendor/thh/tee_0E 0755 system system
+    mkdir /data/vendor/thh/tee_0F 0755 system system
+    mkdir /data/vendor/key_provisioning 0771 system system
+    restorecon_recursive /data/vendor/thh
+
+# Persist / RPMB directories used by the TEE storage proxy
+on post-fs
+    mkdir /mnt/vendor/persist 0771 system system
+    mkdir /mnt/vendor/persist/rpmb 0771 system system
+    mkdir /persist/rpmb 0771 system system
+    mkdir /vendor/persist/rpmb 0771 system system
+    restorecon_recursive /mnt/vendor/persist
+
+# TEE device nodes
+on fs
+    chmod 0660 /dev/teei_client
+    chown system system /dev/teei_client
+    chmod 0660 /dev/teei_config
+    chown system system /dev/teei_config
+    # 0666 for SVP
+    chmod 0666 /dev/isee_tee0
+    chown system drmrpc /dev/isee_tee0
+    chmod 0660 /dev/tz_vfs
+    chown system system /dev/tz_vfs
+    chmod 0660 /dev/teei_fp
+    chown system system /dev/teei_fp
+    chown system drmrpc /dev/ut_keymaster
+    chmod 0660 /dev/ut_keymaster
+    # RPMB
+    chmod 0660 /dev/rpmb0
+    chown system system /dev/rpmb0
+    chmod 0660 /dev/emmcrpmb0
+    chown system system /dev/emmcrpmb0
+    chown system system /dev/utr_tui
+    chmod 0660 /dev/utr_tui
+
+# Soter / TEE crypto state reporting
+on property:vendor.crypto.fake_encrypt=1 && property:vold.post_fs_data_done=1
+    setprop vendor.soter.teei.crypto.state unencrypted

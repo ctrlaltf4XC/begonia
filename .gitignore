@@ -1,0 +1,12 @@
+# Proprietary blobs fetched by fetch-decryption-blobs.sh
+# These are Xiaomi / MediaTek / MicroTrust binaries and must not be committed.
+pbrp_device_tree/recovery/root/vendor/
+
+# Build outputs
+android/
+out/
+*.log
+
+# Editor / OS noise
+*~
+.DS_Store

@@ -1,0 +1,16 @@
+# USB configuration for recovery on begonia (MT6785)
+#
+# Uses configfs gadget (androidboot.usbconfigfs=true) so adb / mtp / mass
+# storage all work from recovery.
+
+on init
+    mkdir /config/usb_gadget 0770 root root
+
+on boot
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/leds/lcd-backlight/brightness "1000"
+
+# TWRP sets these itself; we just make sure the gadget path exists.
+on property:sys.usb.config=mtp,adb
+    write /config/usb_gadget/g1/idVendor 0x2717
+    write /config/usb_gadget/g1/idProduct 0x2717

@@ -1,0 +1,44 @@
+#
+# System properties for PBRP recovery on begonia
+#
+
+ro.secure=0
+ro.adb.secure=0
+ro.debuggable=1
+
+# SoC / platform identification
+ro.mediatek.platform=MT6785
+ro.mediatek.chip_ver=S01
+ro.hardware=mt6785
+ro.hardware.kmsetkey=beanpod
+ro.hardware.gatekeeper=beanpod
+ro.board.platform=mt6785
+ro.product.device=begonia
+ro.treble.enabled=true
+
+# MicroTrust TEE (beanpod) - required for keymaster/gatekeeper
+ro.mtk_tee_gp_support=1
+ro.mtk_microtrust_tee_support=1
+ro.mtk_soter_support=1
+
+# ---------------------------------------------------------------------------
+# File Based Encryption
+#
+# wrappedkey=true means the FBE keys are sealed by the TEE and stored in
+# /metadata/vold/metadata_encryption. This is what Android 13-16 ROMs use.
+# ---------------------------------------------------------------------------
+fbe.metadata.wrappedkey=true
+
+# Display
+ro.sf.lcd_density=440
+
+# USB
+persist.sys.isUsbOtgEnabled=true
+ro.carrier=unknown
+ro.sys.usb.mtp.whql.enable=0
+ro.sys.usb.storage.type=mtp
+ro.sys.usb.bicr=no
+
+# AVB
+ro.boot.avb_version=1.0
+ro.boot.vbmeta.avb_version=1.0

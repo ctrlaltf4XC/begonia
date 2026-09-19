@@ -1,0 +1,21 @@
+# ueventd rules for recovery on begonia
+#
+# Give TWRP readable access to the block devices it needs without depending on
+# a full Android ueventd configuration.
+
+/dev/block/*                0660   root       disk
+/dev/block/platform/*       0660   root       disk
+/dev/block/platform/bootdevice/by-name/*   0660   root   disk
+/dev/block/mapper/*         0660   root       disk
+
+/dev/teei_client            0660   system     system
+/dev/teei_config            0660   system     system
+/dev/isee_tee0              0666   system     drmrpc
+/dev/tz_vfs                 0660   system     system
+/dev/teei_fp                0660   system     system
+/dev/ut_keymaster           0660   system     drmrpc
+/dev/utr_tui                0660   system     system
+/dev/rpmb0                  0660   system     system
+/dev/emmcrpmb0              0660   system     system
+
+/dev/block/zram0            0660   root       disk

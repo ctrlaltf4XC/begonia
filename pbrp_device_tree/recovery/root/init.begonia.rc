@@ -1,0 +1,17 @@
+# ---------------------------------------------------------------------------
+# One image, two partition layouts
+#
+# Detect whether the installed ROM uses the retrofit dynamic super layout
+# (Android 11..16) or the plain non-dynamic layout (stock Android 9/10) and
+# publish the result as ro.begonia.layout. The fstab already contains both
+# the logical entries and the physical by-name entries, so recovery mounts
+# whichever exists; this property only lets tooling/UI report it.
+# ---------------------------------------------------------------------------
+on post-fs-data
+    exec - root -- /system/bin/sh /sbin/begonia-layout-detect.sh
+
+on property:ro.begonia.layout=dynamic
+    write /proc/bootprof "BEGONIA: dynamic (retrofit super) layout"
+
+on property:ro.begonia.layout=non-dynamic
+    write /proc/bootprof "BEGONIA: non-dynamic layout"
