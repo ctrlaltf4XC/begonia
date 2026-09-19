@@ -23,7 +23,6 @@ DEVICE_PATH := device/xiaomi/begonia
 ALLOW_MISSING_DEPENDENCIES := true
 BUILD_BROKEN_DUP_RULES := true
 BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true
-BUILD_BROKEN_PHONY_TARGETS := true
 
 # ----------------------------------------------------------------------------
 # Architecture

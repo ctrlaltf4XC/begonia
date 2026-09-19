@@ -1,79 +1,24 @@
 # Android fstab file for Redmi Note 8 Pro (begonia)
-# TWRP / PBRP recovery fstab -- STATIC (non-dynamic) variant  [DEFAULT]
+# TWRP / PBRP recovery fstab -- DYNAMIC (retrofit /super) variant
 #
-# Correct for stock Android 9/10 firmware, where /system and /vendor are plain
-# physical partitions. It is ALSO the safe choice for Android 11..16 ROMs:
-# there, by-name "system" and "vendor" are the physical extents backing the
-# retrofit /super, and PBRP handles the super itself through lptools.
+# Used when the installed ROM uses retrofit dynamic partitions
+# (Android 11 .. Android 16): system, vendor, product, system_ext and odm are
+# logical partitions inside a /super built on the physical system+vendor
+# extents, and the bootloader passes androidboot.super_partition=system.
 #
-# There are deliberately NO "logical" entries here. TWRP's
-# Prepare_Super_Volume() busy-waits on an unresolvable logical device with no
-# timeout, so a logical entry on non-dynamic firmware hangs recovery forever.
+# IMPORTANT: do NOT mix by-name "system"/"vendor" entries into this file.
+# TWRP's Prepare_Super_Volume() busy-waits on the logical device path with no
+# timeout, so a logical entry that cannot be resolved hangs recovery forever.
+# That is why static and dynamic get separate fstab files.
 #
-# <src>                                             <mnt_point>    <type>  <mnt_flags and options>                             <fs_mgr_flags>
+# <src>            <mnt_point>    <type>  <mnt_flags>   <fs_mgr_flags>
 # ---------------------------------------------------------------------------
-# Core physical partitions
-# ---------------------------------------------------------------------------
-/dev/block/platform/bootdevice/by-name/system        /system_root   ext4    ro                                                  wait,avb=vbmeta,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
-/dev/block/platform/bootdevice/by-name/system        /system_root   erofs   ro                                                  wait
-/dev/block/platform/bootdevice/by-name/vendor        /vendor        ext4    ro                                                  wait,avb,first_stage_mount
-/dev/block/platform/bootdevice/by-name/vendor        /vendor        erofs   ro                                                  wait
+system             /system       ext4    ro            wait,avb=vbmeta,logical,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
+system_ext         /system_ext   ext4    ro            wait,logical,first_stage_mount
+product            /product      ext4    ro            wait,logical,first_stage_mount
+vendor             /vendor       ext4    ro            wait,avb=vbmeta,logical,first_stage_mount
+odm                /odm          ext4    ro            wait,logical,first_stage_mount
 
-# ---------------------------------------------------------------------------
-# Data / metadata
-# ---------------------------------------------------------------------------
-/dev/block/platform/bootdevice/by-name/userdata      /data          ext4    noatime,nosuid,nodev,noauto_da_alloc,errors=panic,inlinecrypt wait,check,formattable,quota,latemount,resize,reservedsize=128m,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized,keydirectory=/metadata/vold/metadata_encryption,fsverity
-/dev/block/platform/bootdevice/by-name/userdata      /data          f2fs    noatime,nosuid,nodev,discard,flush_merge,fsync_mode=nobarrier,reserve_root=134217,resgid=1065,inlinecrypt wait,check,formattable,quota,latemount,reservedsize=128m,checkpoint=fs,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized,keydirectory=/metadata/vold/metadata_encryption,fsverity
-/dev/block/platform/bootdevice/by-name/metadata      /metadata      ext4    noatime,nosuid,nodev,discard,data=journal,commit=1    wait,check,formattable,first_stage_mount
-/dev/block/platform/bootdevice/by-name/cache         /cache         ext4    noatime,nosuid,nodev,noauto_da_alloc,discard         wait,check,formattable
-
-# ---------------------------------------------------------------------------
-# Boot chain
-# ---------------------------------------------------------------------------
-/dev/block/platform/bootdevice/by-name/misc          /misc          emmc    defaults                                            defaults
-/dev/block/platform/bootdevice/by-name/boot          /boot          emmc    defaults                                            defaults
-/dev/block/platform/bootdevice/by-name/recovery      /recovery      emmc    defaults                                            defaults
-/dev/block/platform/bootdevice/by-name/dtbo          /dtbo          emmc    defaults                                            defaults
-/dev/block/platform/bootdevice/by-name/vbmeta        /vbmeta        emmc    defaults                                            defaults
-# ---------------------------------------------------------------------------
-# Vendor / factory partitions
-# ---------------------------------------------------------------------------
-/dev/block/platform/bootdevice/by-name/persist       /mnt/vendor/persist    ext4    noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,formattable
-/dev/block/platform/bootdevice/by-name/nvdata        /mnt/vendor/nvdata     ext4    noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,formattable
-/dev/block/platform/bootdevice/by-name/nvcfg         /mnt/vendor/nvcfg      ext4    noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,formattable
-/dev/block/platform/bootdevice/by-name/protect1      /mnt/vendor/protect_f  ext4    noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,formattable
-/dev/block/platform/bootdevice/by-name/protect2      /mnt/vendor/protect_s  ext4    noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,formattable
-
-# ---------------------------------------------------------------------------
-# Firmware / bootloader / modem (raw eMMC, browse + backup only)
-# ---------------------------------------------------------------------------
-/dev/block/platform/bootdevice/by-name/frp           /persistent    emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/nvram         /nvram         emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/para          /para          emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/expdb         /expdb         emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/logo          /logo          emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/proinfo       /proinfo       emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/scp1          /scp1          emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/scp2          /scp2          emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/sspm_1        /sspm_1        emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/sspm_2        /sspm_2        emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/spmfw         /spmfw         emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/md1img        /md1img        emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/md1dsp        /md1dsp        emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/audio_dsp     /audio_dsp     emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/gz1           /gz1           emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/gz2           /gz2           emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/tee1          /tee1          emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/tee2          /tee2          emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/cam_vpu1      /cam_vpu1      emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/cam_vpu2      /cam_vpu2      emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/cam_vpu3      /cam_vpu3      emmc    defaults    defaults
-
-# ---------------------------------------------------------------------------
-# External storage
-# ---------------------------------------------------------------------------
-/devices/platform/externdevice*                      auto           auto    defaults    voldmanaged=sdcard1:auto,encryptable=userdata
-/devices/platform/usb3_xhci*                         auto           vfat    defaults    voldmanaged=usbotg:auto
-
-# ZRAM
-/dev/block/zram0                                     none           swap    defaults    zramsize=55%,zram_backingdev_size=512M
+/dev/block/platform/bootdevice/by-name/userdata   /data      f2fs    noatime,nosuid,nodev,discard,flush_merge,fsync_mode=nobarrier,reserve_root=134217,resgid=1065,inlinecrypt wait,check,formattable,quota,latemount,reservedsize=128m,checkpoint=fs,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized,keydirectory=/metadata/vold/metadata_encryption,fsverity
+/dev/block/platform/bootdevice/by-name/misc       /misc      emmc    defaults    defaults
+/dev/block/platform/bootdevice/by-name/metadata   /metadata  ext4    noatime,nosuid,nodev,discard    wait,check,formattable,first_stage_mount
