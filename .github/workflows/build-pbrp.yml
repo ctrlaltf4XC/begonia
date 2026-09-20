@@ -1,192 +1,121 @@
 name: Build PBRP for begonia
 
-# Builds PitchBlack Recovery for the Redmi Note 8 Pro (begonia) inside a
-# GitHub-hosted runner, then uploads the recovery.img and the flashable zip.
-#
-# The build uses the PBRP android-12.1 manifest (TWRP 3.7.1_12 / PBRP 4.0),
-# which is the newest actively-maintained PBRP branch and provides the FBE
-# v2 + hardware-wrapped-key + lptools support required for Android 16 ROMs.
-
 on:
-  workflow_dispatch:
-    inputs:
-      manifest_branch:
-        description: "PBRP manifest branch"
-        required: true
-        default: "android-12.1"
-        type: choice
-        options:
-          - android-12.1
-          - android-14.0
-      make_target:
-        description: "Make target"
-        required: true
-        default: "recoveryimage"
-        type: choice
-        options:
-          - recoveryimage
-          - pbrp
-          - bootimage
-      fstab_variant:
-        description: "Partition layout: static = non-dynamic/Android 9-10 (safe default), dynamic = retrofit /super for Android 11-16"
-        required: true
-        default: "static"
-        type: choice
-        options:
-          - static
-          - dynamic
   push:
-    branches:
-      - main
-    paths-ignore:
-      - "**.md"
-
-concurrency:
-  group: pbrp-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  MANIFEST_URL: https://github.com/PitchBlackRecoveryProject/manifest_pb.git
-  DEVICE_TREE: pbrp_device_tree
-  DEVICE_PATH: device/xiaomi/begonia
-  LUNCH_TARGET: pb_begonia-eng
-  TZ: Europe/London
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    name: PBRP ${{ github.event.inputs.manifest_branch || 'android-12.1' }}
-    runs-on: ubuntu-22.04
-    timeout-minutes: 350
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ALLOW_MISSING_DEPENDENCIES: true
+      LC_ALL: C
     steps:
-      - name: Free up disk space
-        run: |
-          echo "Before:"
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk \
-                      /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" \
-                      /usr/share/swift /usr/lib/jvm || true
-          sudo apt-get clean
-          echo "After:"
-          df -h /
-
-      - name: Checkout device tree
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          path: device-tree
+          fetch-depth: 1
 
-      - name: Install build dependencies
+      - name: Setup build environment
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
-            git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
-            lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
-            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
-            rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 \
-            python-is-python3 openjdk-11-jdk-headless
-          df -h
+          sudo apt-get update -qq
+          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev libc6-dev-i386 libncurses5 libncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig python3 python3-is-python3 libxml-simple-perl
+          sudo apt-get install -y bc bsdmainutils csstools device-tree-compiler gdisk libssl-dev lzop pngcrush rsync schedtool squashfs-tools
+          sudo apt-get install -y libxml2-utils maven ncftp htop imagemagick liblz4-tool android-tools-adb android-tools-fastboot
 
-      - name: Configure git and repo
-        run: |
-          git config --global user.name "PBRP CI"
-          git config --global user.email "ci@begonia.local"
-          git config --global color.ui false
-          mkdir -p ~/bin
-          curl -s https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
 
-      - name: Cache ccache
+      - name: Setup ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ github.event.inputs.manifest_branch || 'android-12.1' }}-${{ github.sha }}
+          key: ${{ runner.os }}-ccache-${{ github.sha }}
           restore-keys: |
-            ccache-${{ github.event.inputs.manifest_branch || 'android-12.1' }}-
+            ${{ runner.os }}-ccache-
 
-      - name: Initialise and sync PBRP manifest
-        env:
-          MANIFEST_BRANCH: ${{ github.event.inputs.manifest_branch || 'android-12.1' }}
+      - name: Initialize PBRP
         run: |
-          mkdir -p android && cd android
-          repo init -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH" --depth 1 \
-                    --git-lfs --no-clone-bundle
-          # Drop the largest non-essential projects, then sync.
-          repo sync -c -j"$(nproc)" --force-sync --no-clone-bundle --no-tags \
-                    --optimized-fetch || repo sync -c -j"$(nproc)" --force-sync
-          echo "Sync complete."
+          repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pbrp.git -b android-12.1
+          mkdir -p .repo/local_manifests
+          cp pbrp_device_tree/pb_begonia.mk .repo/local_manifests/
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
-      - name: Place device tree
+      - name: Copy device tree
         run: |
-          cd android
-          rm -rf "$DEVICE_PATH"
-          mkdir -p "$(dirname "$DEVICE_PATH")"
-          cp -a "../device-tree/$DEVICE_TREE" "$DEVICE_PATH"
-          ls -la "$DEVICE_PATH"
+          rm -rf device/xiaomi/begonia
+          mkdir -p device/xiaomi
+          cp -rp pbrp_device_tree device/xiaomi/begonia
 
       - name: Select fstab variant
-        env:
-          FSTAB_VARIANT: ${{ github.event.inputs.fstab_variant || 'static' }}
+        id: fstab
         run: |
-          cd android
-          bash "$DEVICE_PATH/select-fstab.sh" "$FSTAB_VARIANT"
-          echo "--- active recovery.fstab (non-comment entries) ---"
-          grep -vE '^\s*#' "$DEVICE_PATH/recovery/root/system/etc/recovery.fstab" | grep -v '^$'
+          # Default to static; can be overridden via workflow_dispatch input
+          VARIANT="${INPUT_VARIANT:-static}"
+          echo "variant=$VARIANT" >> $GITHUB_OUTPUT
+          echo "Selected fstab variant: $VARIANT"
+          ls -la pbrp_device_tree/variants/recovery.fstab.$VARIANT
 
-      - name: Apply begonia patches
+      - name: Setup fstab
         run: |
-          cd android
-          bash "$DEVICE_PATH/patches/apply-patches.sh" || \
-            echo "No patches to apply (or already applied)."
+          VARIANT="${{ steps.fstab.outputs.variant }}"
+          mkdir -p device/xiaomi/begonia/recovery/root/system/etc
+          cp pbrp_device_tree/variants/recovery.fstab.$VARIANT device/xiaomi/begonia/recovery/root/system/etc/recovery.fstab
 
-      - name: Set up build environment
+      - name: Fetch decryption blobs
         run: |
-          cd android
-          export ALLOW_MISSING_DEPENDENCIES=true
+          bash pbrp_device_tree/fetch-decryption-blobs.sh
+
+      - name: Apply patches
+        run: |
+          bash pbrp_device_tree/patches/apply-patches.sh
+
+      - name: Setup build
+        run: |
           source build/envsetup.sh
-          lunch "$LUNCH_TARGET"
-          echo "Lunch target set: $LUNCH_TARGET"
+          lunch pb_begonia-eng
 
-      - name: Build recovery
-        env:
-          MAKE_TARGET: ${{ github.event.inputs.make_target || 'recoveryimage' }}
+      - name: Build recovery image
         run: |
-          cd android
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export LC_ALL=C
-          source build/envsetup.sh
-          lunch "$LUNCH_TARGET"
-          set -o pipefail
-          make -j"$(nproc)" "$MAKE_TARGET" 2>&1 | tee /tmp/build.log
+          mka recoveryimage
 
-      - name: Collect artefacts
-        if: always()
+      - name: Create flashable zip
+        if: success()
         run: |
-          mkdir -p out
-          cd android
-          find out/target/product/begonia -maxdepth 1 \
-               \( -name "recovery.img" -o -name "*.zip" -o -name "boot.img" \
-                  -o -name "dtbo.img" -o -name "vbmeta.img" \) \
-               -exec cp -v {} ../out/ \; || true
-          cd ..
-          ls -la out/ || true
-          # Also grab the compiled fstab for verification
-          cp -v android/out/target/product/begonia/recovery/root/system/etc/recovery.fstab \
-                out/ 2>/dev/null || true
+          OUT_DIR=out/target/product/begonia
+          RECOVERY_IMG=$OUT_DIR/recovery.img
+          if [ -f "$RECOVERY_IMG" ]; then
+            mkdir -p flashable_zip/META-INF/com/google/android
+            cp $RECOVERY_IMG flashable_zip/
+            # Create minimal updater-script
+            echo 'ui_print("Installing PBRP recovery...");' > flashable_zip/META-INF/com/google/android/updater-script
+            echo 'package_extract_file("recovery.img", "/dev/block/bootdevice/by-name/recovery");' >> flashable_zip/META-INF/com/google/android/updater-script
+            echo 'ui_print("Done!");' >> flashable_zip/META-INF/com/google/android/updater-script
+            # Create dummy update-binary
+            echo '#!/system/bin/sh' > flashable_zip/META-INF/com/google/android/update-binary
+            chmod +x flashable_zip/META-INF/com/google/android/update-binary
+            cd flashable_zip && zip -r ../PBRP-begonia-${VARIANT}.zip . && cd ..
+            mv PBRP-begonia-${VARIANT}.zip $OUT_DIR/
+            echo "Flashable zip created: $OUT_DIR/PBRP-begonia-${VARIANT}.zip"
+          else
+            echo "ERROR: recovery.img not found in $OUT_DIR"
+            exit 1
+          fi
 
-      - name: Upload build log
-        if: always()
+      - name: Upload artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: /tmp/build.log
-          if-no-files-found: warn
-
-      - name: Upload recovery image
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pbrp-begonia-${{ github.event.inputs.fstab_variant || 'static' }}-${{ github.run_number }}
-          path: out/*
-          if-no-files-found: warn
+          name: PBRP-begonia-artifacts
+          path: |
+            out/target/product/begonia/recovery.img
+            out/target/product/begonia/PBRP-begonia-*.zip
+            out/target-product/begonia/obj/EXECUTABLES/recovery_intermediates/
+            out/target-product/begonia/obj/SHARED_LIBRARIES/libshim_beanpod_intermediates/
+          retention-days: 30
