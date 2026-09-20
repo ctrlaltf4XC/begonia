@@ -50,10 +50,10 @@ jobs:
 
       - name: Initialize PBRP
         run: |
-          repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pbrp.git -b android-12.1
+          repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b android-12.1
           mkdir -p .repo/local_manifests
           cp pbrp_device_tree/pb_begonia.mk .repo/local_manifests/
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --git-lfs
 
       - name: Copy device tree
         run: |
