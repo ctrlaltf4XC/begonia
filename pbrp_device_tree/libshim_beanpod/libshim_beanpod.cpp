@@ -55,7 +55,7 @@ void _ZN9keymaster16AuthorizationSetD2Ev() {}
 
 void _ZN9keymaster16ImportKeyRequest14SetKeyMaterialEPKvm(
         keymaster::ImportKeyRequest* t, const uint8_t* k, size_t l) {
-    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
+    t->key_data = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16ExportKeyRequest14SetKeyMaterialEPKvm(
