@@ -21,24 +21,32 @@ jobs:
       - name: Setup build environment
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev libc6-dev-i386 libncurses5 libncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig python3 python-is-python3 libxml-simple-perl
-          sudo apt-get install -y bc bsdmainutils csstools device-tree-compiler gdisk libssl-dev lzop pngcrush rsync schedtool squashfs-tools
-          sudo apt-get install -y libxml2-utils maven ncftp htop imagemagick liblz4-tool android-tools-adb android-tools-fastboot
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
+            lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
+            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
+            rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 \
+            python-is-python3 openjdk-11-jdk-headless
+          df -h
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-          cache: gradle
+      - name: Configure git and repo
+        run: |
+          git config --global user.name "PBRP CI"
+          git config --global user.email "ci@begonia.local"
+          git config --global color.ui false
+          mkdir -p ~/bin
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> "$GITHUB_PATH"
 
-      - name: Setup ccache
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-${{ github.sha }}
+          key: ccache-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-ccache-
+            ccache-
 
       - name: Initialize PBRP
         run: |
