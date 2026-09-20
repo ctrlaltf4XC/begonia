@@ -64,6 +64,9 @@ jobs:
           rm -rf device/xiaomi/begonia
           mkdir -p device/xiaomi
           cp -rp pbrp_device_tree device/xiaomi/begonia
+          # Remove libshim_beanpod from the copied tree to avoid duplicate definition
+          # since we want to use the one from pbrp_device_tree/libshim_beanpod
+          rm -rf device/xiaomi/begonia/libshim_beanpod
 
       - name: Select fstab variant
         id: fstab
