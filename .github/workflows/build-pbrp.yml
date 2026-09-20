@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 350
     env:
       ALLOW_MISSING_DEPENDENCIES: true
       LC_ALL: C
@@ -50,10 +50,14 @@ jobs:
 
       - name: Initialize PBRP
         run: |
+          echo "Starting repo init..."
           repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b android-12.1
+          echo "Repo init completed."
           mkdir -p .repo/local_manifests
           cp pbrp_device_tree/pb_begonia.mk .repo/local_manifests/
+          echo "Starting repo sync..."
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          echo "Repo sync completed."
 
       - name: Copy device tree
         run: |
