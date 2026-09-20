@@ -4,7 +4,7 @@ A complete, buildable **PitchBlack Recovery Project (PBRP)** device tree for the
 Redmi Note 8 Pro — codename **begonia** / **begoniain** — MediaTek **MT6785**
 (Helio G90T).
 
-# Trigger rebuild to test shim fix
+# Trigger rebuild to test fixed build step
 
 The single recovery image produced by this tree supports:
 
