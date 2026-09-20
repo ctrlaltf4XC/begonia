@@ -1,0 +1,27 @@
+# recovery.fstab for Redmi Note 8 Pro (begonia) -- KNOWN-GOOD / SAFE baseline
+#
+# This file is a copy of the recovery.fstab from the confirmed-working begonia
+# PBRP tree:
+#   Saikrishna1504/twrp_device_xiaomi_begonia-pbrp  (recovery/root/system/etc/recovery.fstab)
+# which our README credits as "working begonia PBRP tree carrying the beanpod
+# decrypt stack".
+#
+# It exists purely as a DIAGNOSTIC BASELINE. If the default (static) image hangs
+# on the PBRP splash but an image built with this fstab boots, the fault is in
+# our extended fstab, not in the kernel/boot image.
+#
+# Deliberately minimal: only the partitions TWRP actually needs are listed.
+# The known-good tree lists NO /cache, NO /boot, NO /recovery, NO /dtbo,
+# NO /vbmeta, no MTK firmware partitions, no zram swap and no wildcard
+# /devices/platform/* voldmanaged lines.
+#
+# NO "logical" entries: TWRP's Prepare_Super_Volume() busy-waits on an
+# unresolvable logical device with NO timeout, which hangs recovery forever.
+
+#<src>                                           <mnt_point>           <type>   <mnt_flags and options>                                         <fs_mgr_flags>
+/dev/block/platform/bootdevice/by-name/system    /system               ext4     ro                                                              wait,avb=vbmeta,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
+/dev/block/platform/bootdevice/by-name/vendor    /vendor               ext4     ro                                                              wait,avb,first_stage_mount
+/dev/block/platform/bootdevice/by-name/misc      /misc                 emmc     defaults                                                        defaults
+/dev/block/platform/bootdevice/by-name/userdata   /data       ext4     noatime,nosuid,nodev,noauto_da_alloc,errors=panic,inlinecrypt wait,check,formattable,quota,latemount,resize,reservedsize=128m,fileencryption=aes-256-xts:aes-256-cts:v2,keydirectory=/metadata/vold/metadata_encryption
+/dev/block/platform/bootdevice/by-name/userdata   /data       f2fs     noatime,nosuid,nodev,discard,flush_merge,reserve_root=134217,resgid=1065,alloc_mode=reuse,fsync_mode=nobarrier,inlinecrypt wait,check,formattable,quota,latemount,reservedsize=128m,fileencryption=aes-256-xts:aes-256-cts:v2,keydirectory=/metadata/vold/metadata_encryption
+/dev/block/platform/bootdevice/by-name/metadata  /metadata             ext4     noatime,nosuid,nodev,discard                                    wait,check,formattable,first_stage_mount

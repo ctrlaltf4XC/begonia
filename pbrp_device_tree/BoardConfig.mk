@@ -61,7 +61,10 @@ BOARD_KERNEL_CMDLINE += androidboot.usbconfigfs=true
 # Retrofit super: the /super metadata lives in the physical "system" partition.
 # Harmless on non-dynamic layouts (kernel only reads it when super exists).
 BOARD_KERNEL_CMDLINE += androidboot.super_partition=system
-BOARD_KERNEL_CMDLINE += androidboot.init_fatal_reboot_target=recovery
+# init_fatal_reboot_target=recovery makes a fatal init error reboot straight
+# back into recovery, which the user sees as "stuck/looping on the PBRP splash".
+# The known-working begonia trees use "bootloader" so the failure is visible.
+BOARD_KERNEL_CMDLINE += androidboot.init_fatal_reboot_target=bootloader
 
 BOARD_KERNEL_BASE := 0x40078000
 BOARD_KERNEL_OFFSET := 0x00008000
@@ -209,7 +212,15 @@ TARGET_VENDOR_PROP += $(DEVICE_PATH)/vendor.prop
 TW_INCLUDE_CRYPTO := true
 TW_INCLUDE_CRYPTO_FBE := true
 TW_INCLUDE_FBE_METADATA_DECRYPT := true
+# The known-working begonia PBRP tree (Saikrishna1504) uses policy 1. Policy 2
+# makes TWRP set up fscrypt v2 + the /metadata key directory before the main
+# menu is shown; if any piece is missing recovery blocks on the splash.
+# Set BEANPOD_FSCRYPT_V2 := true only when debugging wrapped-key decryption.
+ifeq ($(BEANPOD_FSCRYPT_V2),true)
 TW_USE_FSCRYPT_POLICY := 2
+else
+TW_USE_FSCRYPT_POLICY := 1
+endif
 TW_CRYPTO_SYSTEM_USER := true
 
 # ----------------------------------------------------------------------------
@@ -231,11 +242,28 @@ TW_INCLUDE_FUSE_NTFS := true
 TARGET_RECOVERY_PIXEL_FORMAT := "RGBX_8888"
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery/root/system/etc/recovery.fstab
 TARGET_RECOVERY_DEVICE_DIRS += $(DEVICE_PATH)
-TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT := true
+# NOTE: TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT was removed on purpose.
+# It forces a display blank/unblank during recovery init, which on MTK lands in
+# the driver's wait_event path that the failing dmesg showed:
+#   [DISP][_ioctl_wait_self_refresh_trigger] ERROR:[REPAINT] wait_event
+# unexpectedly, ret:-512
+# The known-working begonia tree does not set it.
 TARGET_RECOVERY_LED_PATH := /sys/class/leds/lcd-backlight/brightness
 TARGET_RECOVERY_ALLOW_OFF_CHARGING := true
 
-# Relink the beanpod keymaster/gatekeeper stack so /data can be decrypted
+# ----------------------------------------------------------------------------
+# beanpod (MicroTrust TEE) keymaster stack -- OPT-IN
+#
+# OFF by default so the default image matches the known-working begonia tree
+# exactly (no vendor keymaster libs relinked into the recovery ramdisk).
+#
+# This matters: TWRP decrypts /data *before* the main menu is drawn, so if the
+# vendor libkeymaster4.so path blocks (no hwservicemanager / teei_daemon in
+# recovery) the symptom is exactly "stuck on the PBRP splash".
+#
+# Build with BEANPOD_CRYPTO=true to re-enable hardware-wrapped-key decryption.
+# ----------------------------------------------------------------------------
+ifeq ($(BEANPOD_CRYPTO),true)
 TARGET_RECOVERY_DEVICE_MODULES += \
     libkeymaster4 \
     libpuresoftkeymasterdevice \
@@ -244,12 +272,16 @@ TARGET_RECOVERY_DEVICE_MODULES += \
 TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
     $(TARGET_OUT_SHARED_LIBRARIES)/libkeymaster4.so \
     $(TARGET_OUT_SHARED_LIBRARIES)/libpuresoftkeymasterdevice.so
+endif
 
 # ----------------------------------------------------------------------------
 # TWRP / PBRP build flags
 # ----------------------------------------------------------------------------
 TW_THEME := portrait_hdpi
 TW_DEVICE_VERSION := begonia-dynd
+# TW_SCREEN_BLANK_ON_BOOT triggers another MTK blank/unblank at startup; the
+# known-working begonia tree keeps it on, so leave it, but if the splash hangs
+# this is the second thing to try flipping to false.
 TW_SCREEN_BLANK_ON_BOOT := true
 TW_Y_OFFSET := 80
 TW_H_OFFSET := -80
@@ -294,18 +326,3 @@ PB_TORCH_PATH := "/sys/class/leds/flash-light"
 # ----------------------------------------------------------------------------
 PRODUCT_SOONG_NAMESPACES += $(DEVICE_PATH)
 BOARD_USES_METADATA_PARTITION := true
-# ----------------------------------------------------------------------------
-# DISPLAY DRIVER FIX - Frame Buffer Repaint Resolution
-# ----------------------------------------------------------------------------
-MTK_DISPLAY_SUPPORT := true
-TARGET_BOARD_PLATFORM_GPU := mali-g76mc4
-TARGET_RECOVERY_PIXEL_FORMAT := "RGBX_8888"
-TW_Y_OFFSET := 80
-TW_H_OFFSET := -80
-TW_DEFAULT_BRIGHTNESS := 1024
-TW_MAX_BRIGHTNESS := 2047
-
-# Display driver re-linking
-TARGET_RECOVERY_DEVICE_MODULES += libdisp_drv
-TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
-    $(TARGET_OUT_SHARED_LIBRARIES)/libdisp_drv.so

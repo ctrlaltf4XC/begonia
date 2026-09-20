@@ -8,7 +8,7 @@ echo "🎯=== DYNAMIC PBRP BUILD FOR BEGONIA ==="
 echo "Building dynamic recovery image optimized for Android 11+ ROMs..."
 
 # Configuration
-export INPUT_VARIANT=dynamic
+export PBRP_VARIANT=dynamic
 export ALLOW_MISSING_DEPENDENCIES=true
 
 # Verification - Check workspace preparation
@@ -44,7 +44,7 @@ rm -rf device/xiaomi/begonia/libshim_beanpod
 
 # Select dynamic fstab
 mkdir -p device/xiaomi/begonia/recovery/root/system/etc
-cp pbrp_device_tree/variants/recovery.fstab.$INPUT_VARIANT \
+cp pbrp_device_tree/variants/recovery.fstab.$PBRP_VARIANT \
    device/xiaomi/begonia/recovery/root/system/etc/recovery.fstab
 
 # Fetch dependencies
