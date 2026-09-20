@@ -55,37 +55,37 @@ void _ZN9keymaster16AuthorizationSetD2Ev() {}
 
 void _ZN9keymaster16ImportKeyRequest14SetKeyMaterialEPKvm(
         keymaster::ImportKeyRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16ExportKeyRequest14SetKeyMaterialEPKvm(
         keymaster::ExportKeyRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16AttestKeyRequest14SetKeyMaterialEPKvm(
         keymaster::AttestKeyRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster16DeleteKeyRequest14SetKeyMaterialEPKvm(
         keymaster::DeleteKeyRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster17UpgradeKeyRequest14SetKeyMaterialEPKvm(
         keymaster::UpgradeKeyRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster21BeginOperationRequest14SetKeyMaterialEPKvm(
         keymaster::BeginOperationRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 void _ZN9keymaster28GetKeyCharacteristicsRequest14SetKeyMaterialEPKvm(
         keymaster::GetKeyCharacteristicsRequest* t, const uint8_t* k, size_t l) {
-    t->key_data = keymaster::KeymasterKeyBlob(k, l);
+    t->key_blob = keymaster::KeymasterKeyBlob(k, l);
 }
 
 /* ------------------------------------------------------------------ */
