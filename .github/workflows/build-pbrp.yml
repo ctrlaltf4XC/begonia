@@ -95,6 +95,8 @@ jobs:
 
       - name: Build recovery image
         run: |
+          source build/envsetup.sh
+          lunch pb_begonia-eng
           mka recoveryimage
 
       - name: Create flashable zip
