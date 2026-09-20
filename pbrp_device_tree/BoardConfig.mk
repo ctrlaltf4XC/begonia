@@ -294,3 +294,18 @@ PB_TORCH_PATH := "/sys/class/leds/flash-light"
 # ----------------------------------------------------------------------------
 PRODUCT_SOONG_NAMESPACES += $(DEVICE_PATH)
 BOARD_USES_METADATA_PARTITION := true
+# ----------------------------------------------------------------------------
+# DISPLAY DRIVER FIX - Frame Buffer Repaint Resolution
+# ----------------------------------------------------------------------------
+MTK_DISPLAY_SUPPORT := true
+TARGET_BOARD_PLATFORM_GPU := mali-g76mc4
+TARGET_RECOVERY_PIXEL_FORMAT := "RGBX_8888"
+TW_Y_OFFSET := 80
+TW_H_OFFSET := -80
+TW_DEFAULT_BRIGHTNESS := 1024
+TW_MAX_BRIGHTNESS := 2047
+
+# Display driver re-linking
+TARGET_RECOVERY_DEVICE_MODULES += libdisp_drv
+TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
+    $(TARGET_OUT_SHARED_LIBRARIES)/libdisp_drv.so
