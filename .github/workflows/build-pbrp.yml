@@ -124,6 +124,22 @@ jobs:
       - name: Apply patches
         run: ANDROID_BUILD_TOP="$GITHUB_WORKSPACE" bash pbrp_device_tree/patches/apply-patches.sh
 
+      - name: Diagnose BoardConfig
+        run: |
+          echo "=== files ==="
+          ls -la device/xiaomi/begonia/BoardConfig.mk pbrp_device_tree/BoardConfig.mk
+          md5sum device/xiaomi/begonia/BoardConfig.mk pbrp_device_tree/BoardConfig.mk
+          wc -l device/xiaomi/begonia/BoardConfig.mk
+          echo "=== diff copied vs source ==="
+          diff pbrp_device_tree/BoardConfig.mk device/xiaomi/begonia/BoardConfig.mk && echo IDENTICAL
+          echo "=== lines 205-225 (cat -A) ==="
+          sed -n '205,225p' device/xiaomi/begonia/BoardConfig.mk | cat -A
+          echo "=== lines starting with tab ==="
+          grep -nP '^\t' device/xiaomi/begonia/BoardConfig.mk || echo "none"
+          echo "=== bare make parse ==="
+          printf 'include device/xiaomi/begonia/BoardConfig.mk\nall:\n\t@echo PARSE_OK\n' > /tmp/bc_probe.mk
+          make -f /tmp/bc_probe.mk all || echo "PARSE_FAILED rc=$?"
+
       - name: Setup build
         run: |
           source build/envsetup.sh
