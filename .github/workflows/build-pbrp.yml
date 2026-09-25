@@ -124,21 +124,15 @@ jobs:
       - name: Apply patches
         run: ANDROID_BUILD_TOP="$GITHUB_WORKSPACE" bash pbrp_device_tree/patches/apply-patches.sh
 
-      - name: Diagnose BoardConfig
+      - name: Drop device tree source copy
         run: |
-          echo "=== files ==="
-          ls -la device/xiaomi/begonia/BoardConfig.mk pbrp_device_tree/BoardConfig.mk
-          md5sum device/xiaomi/begonia/BoardConfig.mk pbrp_device_tree/BoardConfig.mk
-          wc -l device/xiaomi/begonia/BoardConfig.mk
-          echo "=== diff copied vs source ==="
-          diff pbrp_device_tree/BoardConfig.mk device/xiaomi/begonia/BoardConfig.mk && echo IDENTICAL
-          echo "=== lines 205-225 (cat -A) ==="
-          sed -n '205,225p' device/xiaomi/begonia/BoardConfig.mk | cat -A
-          echo "=== lines starting with tab ==="
-          grep -nP '^\t' device/xiaomi/begonia/BoardConfig.mk || echo "none"
-          echo "=== bare make parse ==="
-          printf 'include device/xiaomi/begonia/BoardConfig.mk\nall:\n\t@echo PARSE_OK\n' > /tmp/bc_probe.mk
-          make -f /tmp/bc_probe.mk all || echo "PARSE_FAILED rc=$?"
+          # device/xiaomi/begonia is the copy that kati/Soong should scan.
+          # Leaving pbrp_device_tree in place registers every module twice, e.g.
+          # "MODULE.TARGET.SHARED_LIBRARIES.libshim_beanpod already defined by
+          # device/xiaomi/begonia/libshim_beanpod". Safe to drop here: the last
+          # step that referenced it was Apply patches.
+          rm -rf pbrp_device_tree
+          test -f device/xiaomi/begonia/libshim_beanpod/Android.mk
 
       - name: Setup build
         run: |
