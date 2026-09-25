@@ -4,20 +4,29 @@
 
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
 echo "🎯=== DYNAMIC PBRP BUILD FOR BEGONIA ==="
 echo "Building dynamic recovery image..."
 
 # Configuration
-# PBRP_VARIANT selects the fstab: static | dynamic | safe
-#   static  - our extended by-name fstab (Android 9/10, safe default 11..16)
-#   dynamic - logical/super fstab (required to *install* Android 11..16 ROMs)
-#   safe    - exact copy of the known-working begonia tree's fstab (diagnostic)
-# BEANPOD_CRYPTO=true relinks the beanpod keymaster stack into recovery; leave
-# it false unless you are testing hardware-wrapped-key decryption.
+# PBRP_VARIANT selects the fstab: safe | static | dynamic
+#   safe    - no-crypto startup image (use this to diagnose the splash hang)
+#   static  - by-name system/vendor image for the explicit crypto build
+#   dynamic - logical/super image for the explicit crypto build
+# PBRP_ENABLE_CRYPTO=true enables the vendor MicroTrust keymaster stack.
 export PBRP_VARIANT="${PBRP_VARIANT:-safe}"
-export BEANPOD_CRYPTO="${BEANPOD_CRYPTO:-false}"
+export PBRP_ENABLE_CRYPTO="${PBRP_ENABLE_CRYPTO:-false}"
 export ALLOW_MISSING_DEPENDENCIES=true
-echo "variant=$PBRP_VARIANT  beanpod_crypto=$BEANPOD_CRYPTO"
+if [ "$PBRP_ENABLE_CRYPTO" != true ] && [ "$PBRP_VARIANT" != safe ]; then
+    echo "ERROR: no-crypto builds support only PBRP_VARIANT=safe" >&2
+    exit 2
+fi
+if [ "$PBRP_ENABLE_CRYPTO" = true ] && [ "$PBRP_VARIANT" = safe ]; then
+    echo "ERROR: crypto builds require PBRP_VARIANT=static or dynamic" >&2
+    exit 2
+fi
+echo "variant=$PBRP_VARIANT crypto=$PBRP_ENABLE_CRYPTO"
 
 # Verification
 echo "✓ Checking fixes..."
@@ -27,7 +36,8 @@ ls pbrp_device_tree/variants/
 
 # Create build directory
 mkdir -p dynamic_build
-cd dynamic_build
+PBRP_ROOT="$REPO_ROOT/dynamic_build"
+cd "$PBRP_ROOT"
 
 # Initialize PBRP (assuming repo is in PATH)
 echo "Initializing PBRP..."
@@ -36,24 +46,27 @@ repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
 # Setup device tree (using fixed version from workspace)
 echo "Setting up device tree..."
-cd /workspaces/begonia
+cd "$PBRP_ROOT"
 rm -rf device/xiaomi/begonia
 mkdir -p device/xiaomi
-cp -rp pbrp_device_tree device/xiaomi/begonia
-rm -rf device/xiaomi/begonia/libshim_beanpod
+cp -rp "$REPO_ROOT/pbrp_device_tree" device/xiaomi/begonia
 
 # Select dynamic fstab
 mkdir -p device/xiaomi/begonia/recovery/root/system/etc
 cp pbrp_device_tree/variants/recovery.fstab.$PBRP_VARIANT \
    device/xiaomi/begonia/recovery/root/system/etc/recovery.fstab
 
-# Fetch dependencies
+# Fetch dependencies only for the explicit crypto build
 cd device/xiaomi/begonia
-./fetch-decryption-blobs.sh
+if [ "$PBRP_ENABLE_CRYPTO" = true ]; then
+    ./fetch-decryption-blobs.sh
+else
+    echo "Skipping TEE blobs for no-crypto build"
+fi
 
 # Apply patches
-cd ../..
-./pbrp_device_tree/patches/apply-patches.sh
+cd "$PBRP_ROOT"
+ANDROID_BUILD_TOP="$PBRP_ROOT" ./device/xiaomi/begonia/patches/apply-patches.sh
 
 # Setup build
 source build/envsetup.sh

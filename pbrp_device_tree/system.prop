@@ -10,28 +10,13 @@ ro.debuggable=1
 ro.mediatek.platform=MT6785
 ro.mediatek.chip_ver=S01
 ro.hardware=mt6785
-ro.hardware.kmsetkey=beanpod
-ro.hardware.gatekeeper=beanpod
 ro.board.platform=mt6785
 ro.product.device=begonia
 ro.treble.enabled=true
 
-# MicroTrust TEE (beanpod) - required for keymaster/gatekeeper
-ro.mtk_tee_gp_support=1
-ro.mtk_microtrust_tee_support=1
-ro.mtk_soter_support=1
-
 # ---------------------------------------------------------------------------
-# File Based Encryption
-#
-# wrappedkey=true means the FBE keys are sealed by the TEE and stored in
-# /metadata/vold/metadata_encryption. This is what Android 13-16 ROMs use.
-# ---------------------------------------------------------------------------
-fbe.metadata.wrappedkey=true
-
-# Also declared system-side by the upstream FBE v2 tree; both copies are
-# harmless and one may be picked up before the vendor property is loaded.
-ro.crypto.volume.filenames_mode=aes-256-cts
+# File Based Encryption properties live in crypto.prop and are loaded only
+# for an explicit PBRP_ENABLE_CRYPTO=true build.
 
 # Display
 ro.sf.lcd_density=440

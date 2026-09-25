@@ -17,27 +17,31 @@ PRODUCT_PROPERTY_OVERRIDES += \
     ro.bootimage.build.date.utc=0 \
     ro.build.date.utc=0
 
-# ---------------------------------------------------------------------------
-# Decryption stack (FDE + FBE v1/v2 + hardware wrapped keys)
-#
-# The MicroTrust "beanpod" keymaster 4.0 and gatekeeper 1.0 HALs need to be
-# relinked into the recovery ramdisk together with their shim, because the
-# vendor implementations were built against an older libkeymaster_messages.
-# ---------------------------------------------------------------------------
-TARGET_RECOVERY_DEVICE_MODULES += \
-    libkeymaster4 \
-    libpuresoftkeymasterdevice \
-    libkeymaster4support \
-    libkeymaster_portable \
-    libkeymaster_messages \
-    libshim_beanpod
+ifeq ($(PBRP_ENABLE_CRYPTO),true)
+    PRODUCT_PROPERTY_OVERRIDES += ro.pbrp.crypto=true
+else
+    PRODUCT_PROPERTY_OVERRIDES += ro.pbrp.crypto=false
+endif
 
-TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
-    $(TARGET_OUT_SHARED_LIBRARIES)/libkeymaster4.so \
-    $(TARGET_OUT_SHARED_LIBRARIES)/libpuresoftkeymasterdevice.so
+# ---------------------------------------------------------------------------
+# Optional hardware-backed decryption stack
+# ---------------------------------------------------------------------------
+# Keep the default image free of the vendor keymaster/TEE path. PBRP enters
+# Decrypt_Data() after drawing the splash, so a blocked HAL can strand the UI
+# there indefinitely.
+ifeq ($(PBRP_ENABLE_CRYPTO),true)
+    TARGET_RECOVERY_DEVICE_MODULES += \
+        libkeymaster4 \
+        libpuresoftkeymasterdevice \
+        libshim_beanpod
 
-PRODUCT_PACKAGES += \
-    libshim_beanpod
+    TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
+        $(TARGET_OUT_SHARED_LIBRARIES)/libkeymaster4.so \
+        $(TARGET_OUT_SHARED_LIBRARIES)/libpuresoftkeymasterdevice.so
+
+    PRODUCT_PACKAGES += \
+        libshim_beanpod
+endif
 
 # ---------------------------------------------------------------------------
 # Extra recovery utilities

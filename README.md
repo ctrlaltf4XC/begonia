@@ -1,260 +1,128 @@
 # PitchBlack Recovery for Redmi Note 8 Pro (begonia)
 
-A complete, buildable **PitchBlack Recovery Project (PBRP)** device tree for the
-Redmi Note 8 Pro — codename **begonia** / **begoniain** — MediaTek **MT6785**
-(Helio G90T).
+Device tree for the Redmi Note 8 Pro (`begonia` / `begoniain`), MediaTek
+Helio G90T (MT6785).
 
-# Trigger rebuild to test fixed build step
+## Important: build the safe image first
 
-The single recovery image produced by this tree supports:
+PBRP draws its splash **before** it processes encrypted storage. The MicroTrust
+FBE path calls `fscrypt_mount_metadata_encrypted()` during startup and can block
+if the vendor keymaster/TEE service is unavailable. A build that merely hides
+`libshim_beanpod` is not safe: the fstab, properties, init services, and HAL
+modules must all be disabled together.
 
-| Capability | Status |
-|---|---|
-| **Non-dynamic partitions** (stock Android 9/10 firmware) — build variant `static` | yes |
-| **Retrofit dynamic partitions** (`/super` over system+vendor, Android 11 to 16) — build variant `dynamic` | yes |
-| **FDE** — full-disk encryption, AES-256-XTS (Android 9) | yes |
-| **FBE v1** — file-based encryption (Android 10/11) | yes |
-| **FBE v2** — metadata-based FBE (Android 12+) | yes |
-| **FBE with hardware wrapped keys** — MicroTrust TEE (Android 13 to 16) | yes |
-| Reading **ext4 / f2fs / erofs / exFAT / NTFS** | yes |
-| **Android 16 (LineageOS 23 / AOSP 16) ROMs** | yes |
+The default `safe` build therefore:
 
-> **Important — two images, not one.**
-> TWRP's `TWPartitionManager::Prepare_Super_Volume()` lists a `logical` fstab
-> entry like this:
-> ```
->     if (partition->Is_Super && !Prepare_Super_Volume(partition))
->         goto clear;                       // partition dropped
->     while (access(fstabEntry.blk_device.c_str(), F_OK) != 0) {
->         usleep(100);                      // NO TIMEOUT
->     }
-> ```
-> On begonia there is no physical `super` partition, so a `logical` entry on
-> stock Android 9/10 firmware would enter an **infinite busy-wait**. That is why
-> the same fstab cannot serve both layouts and why upstream ships **two separate
-> recovery images** (`dynamic` and base/`fbev2`), not one.
->
-> This project therefore ships **two fstab variants** in `variants/` and
-> selects one at build time via `select-fstab.sh`, producing two recovery
-> variants:
->
-> | Variant | fstab | When to flash |
-> |---|---|---|
-> | `static` (default) | by-name system/vendor | Stock Android 9/10, and the **safe default** for Android 11..16 (by-name system/vendor are the super backing extents; PBRP's lptools handles the super itself) |
-> | `dynamic` | logical system/system_ext/product/vendor/odm | Required to **flash / install** Android 11..16 ROMs |
->
-> On startup the `static` image uses `by-name/system` and `by-name/vendor` as the
-> physical extents backing the retrofit `/super`. PBRP's PARTITION_* super handling
-> (via `Get_Super_Partition()` patched in `patches/apply-patches.sh`) locates the
-> by-name super node when `androidboot.super_partition=system` is present, so
-> lptools can read/resize/flash the super area during a dynamic ROM install.
+- sets `PBRP_ENABLE_CRYPTO=false` and `TW_INCLUDE_CRYPTO=false`;
+- does not load the MicroTrust crypto properties or keymaster modules;
+- does not start the beanpod services;
+- uses `variants/recovery.fstab.safe`, which intentionally has no `/data` entry;
+- disables the MTK startup blank/unblank operation; and
+- does not modify or wipe user data.
 
----
+Use this image to confirm that the recovery reaches its main menu. It is a
+startup diagnostic image and cannot access encrypted `/data`.
 
-## Contents
+## Build modes
 
-```
-pbrp_device_tree/                    <- copy to device/xiaomi/begonia
-├── BoardConfig.mk                   board config incl. dual-layout + crypto
-├── device.mk                        common device makefile
-├── pb_begonia.mk                    PBRP product definition (lunch: pb_begonia)
-├── AndroidProducts.mk               lunch choices
-├── Android.mk / Android.bp          build glue
-├── board-info.txt                   assert info
-├── system.prop / vendor.prop        properties (FBE wrappedkey etc.)
-├── prebuilt/
-│   ├── Image.gz                     MT6785 kernel 4.14 (prebuilt)
-│   ├── dtbo.img                     device tree overlay
-│   └── dtb/mtk.dtb                  device tree blob
-├── libshim_beanpod/                 ABI shim for the TEE keymaster HAL
-├── variants/
-│   ├── recovery.fstab.static    [DEFAULT] by-name system/vendor — Android 9/10 + safe Android 11..16
-│   ├── recovery.fstab.dynamic   logical system/system_ext/product/vendor/odm — Android 11..16
-│   └── select-fstab.sh          picks the fstab variant before build
-│   ├── init.recovery.mt6785.rc      main recovery init
-│   ├── init.begonia.rc              layout detection hook
-│   ├── init.recovery.usb.rc         USB gadget config
-│   ├── microtrust_begonia.rc        teei_daemon + TA configuration
-│   ├── ueventd.rc                   device node permissions
-│   ├── sbin/begonia-layout-detect.sh  runtime dynamic vs non-dynamic probe
-│   ├── system/etc/recovery.fstab    dual-layout fstab
-│   ├── system/etc/twrp.flags        backup/flash partition definitions
-│   └── .../vintf/*.xml              HAL manifests
-├── fetch-decryption-blobs.sh        pulls the TEE decryption stack
-└── fetch-vendor-blobs.sh            local alternative (needs vendor tree)
-```
+| Mode | Variant | Crypto | Purpose |
+|---|---|---:|---|
+| `safe` | `safe` | no | Default splash-hang diagnosis; UI boot without touching `/data` |
+| `static` | `static` | yes | By-name system/vendor layout with the explicit MicroTrust stack |
+| `dynamic` | `dynamic` | yes | Retrofit-super layout; required for dynamic Android 11+ layouts |
 
-`.github/workflows/build-pbrp.yml` builds the image in CI.
+The `dynamic` build applies a bounded wait to PBRP's logical-partition setup.
+A missing mapper node is reported and skipped after 10 seconds instead of
+looping forever. The crypto build also creates the MicroTrust shared-memory
+layout during `init`, before `teei_daemon` can start.
 
----
+## GitHub Actions
 
-## Why this design
+The workflow builds the default safe image on pushes to `main` and `dynamic`.
+To choose a mode manually, run **Build PBRP for begonia** and select:
 
-### PBRP has no Android 16 branch
+- `variant=safe`, `crypto=false` — recommended first test;
+- `variant=static`, `crypto=true` — static crypto build; or
+- `variant=dynamic`, `crypto=true` — retrofit-super crypto build.
 
-Checking `PitchBlackRecoveryProject/manifest_pb`, the newest branches are:
+Artifacts contain `recovery.img`, a flashable zip, and `BUILD_INFO.txt`.
 
-| Branch | Last updated |
-|---|---|
-| `android-12.1` | **Sep 2025** (actively maintained) |
-| `android-14.0` | Sep 2024 |
-| `android-11.0` | Oct 2024 |
-
-There is **no `android-15.0` or `android-16.0`**. "A16 support" therefore means
-the recovery must *operate correctly on a device running Android 16*, not that
-PBRP itself is compiled from A16 sources. That is achieved here by:
-
-* **FBE v2 + wrapped keys** — A16 uses fscrypt v2 with keys sealed by the TEE
-  (`/metadata/vold/metadata_encryption`, `dm-default-key`). The beanpod
-  keymaster@4.0 / gatekeeper@1.0 stack is therefore included and relinked.
-* **Retrofit dynamic partitions** — A16 ROMs for begonia put system, vendor,
-  product, system_ext and odm inside `/super`, which itself lives on top of the
-  physical `system` + `vendor` extents.
-* **erofs** — A16 system/vendor images are erofs-compressed.
-
-The default build target is **`android-12.1`** (PBRP 4.0 / TWRP 3.7.1_12), which
-is the newest *stable, maintained* PBRP branch and already contains the FBE v2,
-wrapped-key and lptools code paths. The workflow also offers `android-14.0`.
-
-### How the two images handle the different layouts
-
-begonia shipped with Android 9 (non-dynamic). Android 11+ ROMs retrofit a
-`/super` onto the existing `system`+`vendor` extents.
-
-`variants/recovery.fstab.dynamic` declares system, vendor, product, system_ext
-and odm with the `logical` flag → resolved through device-mapper when a super
-exists. That variant must be flashed when installing/flashing Android 11..16.
-
-`variants/recovery.fstab.static` (the default) uses only `by-name/system` and
-`by-name/vendor` physical entries. This is safe on stock Android 9/10 **and**
-on Android 11..16: there, `by-name/system` is the /super backing extent, and
-PBRP's patched `Get_Super_Partition()` locates the by-name super node when
-`androidboot.super_partition=system` is present, so lptools can read/resize the
-super during a dynamic ROM install — while `by-name/system` still works for
-plain flashing on static ROMs.
-
-### Decryption
-
-```
-teei_daemon  ──> loads the MicroTrust Trusted Applications
-                    |
-keymaster@4.0-service.beanpod ──> unwraps the FBE key (hardware wrapped key)
-gatekeeper@1.0-service ────────> verifies the user credential
-                    |
-              /data decrypted
-```
-
-The beanpod binaries were linked against an older `libkeymaster_messages` ABI.
-`libshim_beanpod` restores the 17 symbols they need; the list was derived
-directly from `readelf -sW libkeymaster4.so | grep UND` and is verified
-complete. The vendor binaries even declare `libshim_beanpod.so` as a
----
-
-## Building
-
-### GitHub Actions (recommended)
-
-Push to `main`, or run the **Build PBRP for begonia** workflow manually
-(`workflow_dispatch`) and choose the manifest branch. Artefacts
-(`recovery.img`, the flashable zip, and the build log) are uploaded to the run.
-
-The workflow:
-
-1. Frees ~30 GB of runner disk.
-2. Installs the PBRP build dependencies.
-3. `repo init` / `repo sync` the chosen PBRP manifest.
-4. Copies this tree to `device/xiaomi/begonia`.
-5. Runs `patches/apply-patches.sh`.
-6. `lunch pb_begonia-eng` and `make recoveryimage`.
-
-### Locally
+## Local build
 
 ```bash
-mkdir pbrp && cd pbrp
-repo init -u https://github.com/PitchBlackRecoveryProject/manifest_pb -b android-12.1 --depth 1
+repo init -u https://github.com/PitchBlackRecoveryProject/manifest_pb \
+    -b android-12.1 --depth=1
 repo sync -c -j8 --force-sync --no-clone-bundle --no-tags
 
-# place the device tree
-git clone <this repo> device/xiaomi/begonia
-# (or: cp -a pbrp_device_tree device/xiaomi/begonia)
+# From the root of this repository:
+mkdir -p device/xiaomi
+cp -a pbrp_device_tree device/xiaomi/begonia
+
+# Safe startup build (default)
+export PBRP_VARIANT=safe
+export PBRP_ENABLE_CRYPTO=false
+
+# For a crypto build, use static or dynamic and set:
+# export PBRP_VARIANT=static
+# export PBRP_ENABLE_CRYPTO=true
 
 cd device/xiaomi/begonia
-./fetch-decryption-blobs.sh          # TEE decryption stack
-
+if [ "$PBRP_ENABLE_CRYPTO" = true ]; then
+    ./fetch-decryption-blobs.sh
+fi
 cd ../../..
+
+bash device/xiaomi/begonia/patches/apply-patches.sh
 source build/envsetup.sh
 lunch pb_begonia-eng
-export ALLOW_MISSING_DEPENDENCIES=true
-make -j$(nproc) recoveryimage
+mka recoveryimage
 ```
 
 Output: `out/target/product/begonia/recovery.img`
 
-Requires ~100 GB of disk and 16 GB of RAM. Use the CI workflow otherwise.
-
-> **Note:** `fetch-decryption-blobs.sh` downloads proprietary Xiaomi / MediaTek
-> / MicroTrust binaries. They are deliberately **not** committed (see
-> `.gitignore`) and must not be redistributed.
-
----
+The crypto build downloads proprietary Xiaomi, MediaTek, and MicroTrust blobs;
+they are not committed to this repository. The build requires approximately
+100 GB of disk space and 16 GB of RAM.
 
 ## Installing
 
 ```bash
 fastboot flash recovery recovery.img
-# or flash the zip from an existing custom recovery
 ```
 
-begonia keeps a dedicated `recovery` partition, so the usual A-only flow
-applies — no `boot` patching is needed.
+The device has a dedicated `recovery` partition. Boot directly to recovery
+with **Volume Up + Power**.
 
-To boot directly into recovery: hold **Volume Up + Power**.
+## If the safe image still shows the splash
 
----
+While it is stuck, collect these files if ADB is available:
 
-## Device facts used by this tree
+```bash
+adb pull /tmp/recovery.log
+adb pull /sys/fs/pstore/console-ramoops
+adb pull /cache/recovery/last_log.gz
+adb shell getprop ro.pbrp.crypto
+adb shell getprop ro.boot.super_partition
+```
 
-| Item | Value |
-|---|---|
-| SoC | MediaTek MT6785 (Helio G90T) |
-| Kernel | 4.14, boot image header v2 |
-| Kernel load base | `0x40078000` |
-| Kernel / ramdisk / tags / dtb offsets | `0x00008000` / `0x07c08000` / `0x0bc08000` / `0x0bc08000` |
-| Boot / recovery partition | 64 MiB each |
-| Physical system / vendor | 3584 MiB / 1536 MiB |
-| Retrofit super total | 5120 MiB (metadata on `system`) |
-| Dynamic partitions | system, vendor, product, system_ext, odm |
-| Metadata partition | present (FBE v2 key directory) |
-| Userdata | ext4 or f2fs, ~112 GiB |
-| Block-by-name root | `/dev/block/platform/bootdevice/by-name` |
-| Keymaster / gatekeeper | `beanpod` (MicroTrust TEE) |
-| Display | 1080x2340 @ 440 dpi (TW portrait_hdpi, Y+80 / H-80) |
-| Brightness | `/sys/class/leds/lcd-backlight/brightness`, max 2047 |
+Do not repeatedly flash the crypto image if the safe image has not been tested;
+the crypto image intentionally enters the vendor HAL path.
 
----
+## Layout and source references
 
-## Known limitations
+The `safe`, `static`, and `dynamic` fstabs are under
+`pbrp_device_tree/variants/`. The default checked-in fstab is safe so a local
+build cannot accidentally start with the dynamic logical entries.
 
-* The prebuilt kernel, `dtbo.img` and `mtk.dtb` are 4.14 MT6785 binaries taken
-  from the working begonia recovery trees. They boot both Android 9 and
-  Android 16 ROMs, but an inline kernel build is not performed here.
-* The proprietary TEE blobs are fetched at build time, not vendored.
-* `libshim_beanpod` covers the keymaster ABI gap on the PBRP 12.1 and 14.0
-  branches. If a future branch changes `libkeymaster_messages`, re-run the
-  `readelf` command in the README to regenerate the symbol list.
-* Flashing a **non-dynamic** ROM over a **dynamic** install (or vice versa)
-  requires a format of `system`/`vendor` (`/super`) first; the recovery
-  supports both but cannot convert layouts by itself.
-
----
+The device configuration is based on the working begonia tree maintained by
+[Saikrishna1504](https://github.com/Saikrishna1504/device_xiaomi_begonia-pbrp).
+The recovery source is
+[PitchBlackRecoveryProject/android_bootable_recovery](https://github.com/PitchBlackRecoveryProject/android_bootable_recovery).
 
 ## Credits
 
-* [PitchBlack Recovery Project](https://github.com/PitchBlackRecoveryProject) — the recovery itself
-* [Team Win Recovery Project](https://github.com/TeamWin) — base recovery, lptools
-* [SebaUbuntu](https://github.com/SebaUbuntu) — TWRP device tree generator
-* [Saikrishna1504](https://github.com/Saikrishna1504) — working begonia PBRP tree carrying the beanpod decrypt stack
-* [WuXing90](https://github.com/WuXing90) — modern begonia trees, retrofit super layout reference
-* [begonia-dev](https://github.com/begonia-dev) — maintained begonia device and vendor trees
-* [LineageOS](https://github.com/LineageOS) — `mt6785-common` device tree
-`DT_NEEDED`, confirming this is the intended mechanism.
+- PitchBlack Recovery Project
+- Team Win Recovery Project
+- Saikrishna1504
+- WuXing90
+- LineageOS

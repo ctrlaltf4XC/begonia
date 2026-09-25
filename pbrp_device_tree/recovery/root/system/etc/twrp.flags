@@ -20,8 +20,9 @@
 /tee2              emmc     /dev/block/platform/bootdevice/by-name/tee2         flags=backup=1;display="TEE2";flashimg=1
 
 # --- Dynamic super (retrofit) ---------------------------------------------------
-# Back up / flash the whole super, plus its two physical backing extents.
-/super             emmc     /dev/block/platform/bootdevice/by-name/super        flags=display="Super (retrofit)";backup=1;flashimg=1
+# begonia has no physical by-name/super node. The dynamic recovery path creates
+# its logical super entry from the selected fstab; only physical backing
+# extents belong in twrp.flags.
 /system            emmc     /dev/block/platform/bootdevice/by-name/system       flags=display="System (raw)";backup=1;flashimg=1
 /vendor            emmc     /dev/block/platform/bootdevice/by-name/vendor       flags=display="Vendor (raw)";backup=1;flashimg=1
 

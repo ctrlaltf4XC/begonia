@@ -1,24 +1,11 @@
-# Android fstab file for Redmi Note 8 Pro (begonia)
-# TWRP / PBRP recovery fstab -- DYNAMIC (retrofit /super) variant
+# Safe startup fstab for begonia.
 #
-# Used when the installed ROM uses retrofit dynamic partitions
-# (Android 11 .. Android 16): system, vendor, product, system_ext and odm are
-# logical partitions inside a /super built on the physical system+vendor
-# extents, and the bootloader passes androidboot.super_partition=system.
-#
-# IMPORTANT: do NOT mix by-name "system"/"vendor" entries into this file.
-# TWRP's Prepare_Super_Volume() busy-waits on the logical device path with no
-# timeout, so a logical entry that cannot be resolved hangs recovery forever.
-# That is why static and dynamic get separate fstab files.
-#
-# <src>            <mnt_point>    <type>  <mnt_flags>   <fs_mgr_flags>
-# ---------------------------------------------------------------------------
-system             /system       ext4    ro            wait,avb=vbmeta,logical,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
-system_ext         /system_ext   ext4    ro            wait,logical,first_stage_mount
-product            /product      ext4    ro            wait,logical,first_stage_mount
-vendor             /vendor       ext4    ro            wait,avb=vbmeta,logical,first_stage_mount
-odm                /odm          ext4    ro            wait,logical,first_stage_mount
+# PBRP draws its splash before processing encrypted storage. The MicroTrust
+# metadata-FBE path can block in fscrypt_mount_metadata_encrypted() when the
+# vendor TEE/HAL is unavailable. This default omits /data and all fscrypt
+# options; it does not wipe or modify user data.
 
-/dev/block/platform/bootdevice/by-name/userdata   /data      f2fs    noatime,nosuid,nodev,discard,flush_merge,fsync_mode=nobarrier,reserve_root=134217,resgid=1065,inlinecrypt wait,check,formattable,quota,latemount,reservedsize=128m,checkpoint=fs,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized,keydirectory=/metadata/vold/metadata_encryption,fsverity
-/dev/block/platform/bootdevice/by-name/misc       /misc      emmc    defaults    defaults
-/dev/block/platform/bootdevice/by-name/metadata   /metadata  ext4    noatime,nosuid,nodev,discard    wait,check,formattable,first_stage_mount
+/dev/block/platform/bootdevice/by-name/system    /system               ext4     ro                                                              wait,avb=vbmeta,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
+/dev/block/platform/bootdevice/by-name/vendor    /vendor               ext4     ro                                                              wait,avb,first_stage_mount
+/dev/block/platform/bootdevice/by-name/misc      /misc                 emmc     defaults                                                        defaults
+/dev/block/platform/bootdevice/by-name/metadata  /metadata             ext4     noatime,nosuid,nodev,discard                                    wait,check,formattable,first_stage_mount

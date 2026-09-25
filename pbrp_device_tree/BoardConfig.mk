@@ -17,6 +17,11 @@
 
 DEVICE_PATH := device/xiaomi/begonia
 
+# Build-time recovery modes. The default is a no-crypto startup image; crypto
+# is explicit because the MicroTrust HAL can block before the UI is loaded.
+PBRP_ENABLE_CRYPTO ?= false
+PBRP_VARIANT ?= safe
+
 # ----------------------------------------------------------------------------
 # Minimal manifest build relaxation
 # ----------------------------------------------------------------------------
@@ -58,12 +63,12 @@ BOARD_HAS_MTK_HARDWARE := true
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2
 BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
 BOARD_KERNEL_CMDLINE += androidboot.usbconfigfs=true
-# Retrofit super: the /super metadata lives in the physical "system" partition.
-# Harmless on non-dynamic layouts (kernel only reads it when super exists).
-BOARD_KERNEL_CMDLINE += androidboot.super_partition=system
-# init_fatal_reboot_target=recovery makes a fatal init error reboot straight
-# back into recovery, which the user sees as "stuck/looping on the PBRP splash".
-# The known-working begonia trees use "bootloader" so the failure is visible.
+# Retrofit super is meaningful only for a dynamic build. Do not force the
+# stock/static recovery into lptools/super setup during normal startup.
+ifeq ($(PBRP_VARIANT),dynamic)
+    BOARD_KERNEL_CMDLINE += androidboot.super_partition=system
+endif
+# A fatal init error should leave recovery rather than loop on its splash.
 BOARD_KERNEL_CMDLINE += androidboot.init_fatal_reboot_target=bootloader
 
 BOARD_KERNEL_BASE := 0x40078000
@@ -190,38 +195,31 @@ BOARD_EROFS_USE_ZTAILPACKING := true
 BOARD_EROFS_PCLUSTER_SIZE := 262144
 
 # ----------------------------------------------------------------------------
-# Properties
+# Properties / encryption
 # ----------------------------------------------------------------------------
 TARGET_SYSTEM_PROP += $(DEVICE_PATH)/system.prop
-TARGET_VENDOR_PROP += $(DEVICE_PATH)/vendor.prop
-# Metadata partition is required for FBE v2 key directory + legacy FDE
-# ----------------------------------------------------------------------------
-# Encryption / Decryption
-#
-#  * FDE  (AES-256-XTS, Android 9)                 -> TW_INCLUDE_CRYPTO
-#  * FBE v1 (Android 10/11 "fscrypt")              -> TW_INCLUDE_CRYPTO_FBE
-#  * FBE v2 (Android 12+ "fscrypt v2", /metadata)  -> TW_USE_FSCRYPT_POLICY := 2
-#  * FBE hardware wrapped keys (Android 13-16)     -> fbe.metadata.wrappedkey
-#    unwrapped through the MicroTrust beanpod TEE
-#    (teei_daemon + keymaster@4.0-service.beanpod + gatekeeper@1.0-service).
-#
-#  Android 16 ROMs use FBE v2 with a wrapped key stored in
-#  /metadata/vold/metadata_encryption and dm-default-key as the volume
-#  crypto method, hence TW_INCLUDE_FBE_METADATA_DECRYPT.
-# ----------------------------------------------------------------------------
-TW_INCLUDE_CRYPTO := true
-TW_INCLUDE_CRYPTO_FBE := true
-TW_INCLUDE_FBE_METADATA_DECRYPT := true
-# The known-working begonia PBRP tree (Saikrishna1504) uses policy 1. Policy 2
-# makes TWRP set up fscrypt v2 + the /metadata key directory before the main
-# menu is shown; if any piece is missing recovery blocks on the splash.
-# Set BEANPOD_FSCRYPT_V2 := true only when debugging wrapped-key decryption.
-ifeq ($(BEANPOD_FSCRYPT_V2),true)
-TW_USE_FSCRYPT_POLICY := 2
+ifeq ($(PBRP_ENABLE_CRYPTO),true)
+    TARGET_VENDOR_PROP += $(DEVICE_PATH)/vendor.prop
+    TARGET_SYSTEM_PROP += $(DEVICE_PATH)/crypto.prop
+    TW_INCLUDE_CRYPTO := true
+    TW_INCLUDE_CRYPTO_FBE := true
+    TW_INCLUDE_FBE_METADATA_DECRYPT := true
+    TW_CRYPTO_SYSTEM_USER := true
+    ifeq ($(BEANPOD_FSCRYPT_V2),true)
+        TW_USE_FSCRYPT_POLICY := 2
+    else
+        TW_USE_FSCRYPT_POLICY := 1
+    endif
 else
-TW_USE_FSCRYPT_POLICY := 1
+    # PBRP's Android.mk uses ifneq(TW_INCLUDE_CRYPTO,), so an explicit
+    # "false" would still pull in keystore/vold modules. Leave these undefined
+    # to remove the crypto build path completely.
+    undefine TW_INCLUDE_CRYPTO
+    undefine TW_INCLUDE_CRYPTO_FBE
+    undefine TW_INCLUDE_FBE_METADATA_DECRYPT
+    undefine TW_CRYPTO_SYSTEM_USER
+    undefine TW_USE_FSCRYPT_POLICY
 endif
-TW_CRYPTO_SYSTEM_USER := true
 
 # ----------------------------------------------------------------------------
 # Dynamic partitions / logical volume tooling
@@ -252,37 +250,13 @@ TARGET_RECOVERY_LED_PATH := /sys/class/leds/lcd-backlight/brightness
 TARGET_RECOVERY_ALLOW_OFF_CHARGING := true
 
 # ----------------------------------------------------------------------------
-# beanpod (MicroTrust TEE) keymaster stack -- OPT-IN
-#
-# OFF by default so the default image matches the known-working begonia tree
-# exactly (no vendor keymaster libs relinked into the recovery ramdisk).
-#
-# This matters: TWRP decrypts /data *before* the main menu is drawn, so if the
-# vendor libkeymaster4.so path blocks (no hwservicemanager / teei_daemon in
-# recovery) the symptom is exactly "stuck on the PBRP splash".
-#
-# Build with BEANPOD_CRYPTO=true to re-enable hardware-wrapped-key decryption.
-# ----------------------------------------------------------------------------
-ifeq ($(BEANPOD_CRYPTO),true)
-TARGET_RECOVERY_DEVICE_MODULES += \
-    libkeymaster4 \
-    libpuresoftkeymasterdevice \
-    libshim_beanpod
-
-TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
-    $(TARGET_OUT_SHARED_LIBRARIES)/libkeymaster4.so \
-    $(TARGET_OUT_SHARED_LIBRARIES)/libpuresoftkeymasterdevice.so
-endif
-
-# ----------------------------------------------------------------------------
 # TWRP / PBRP build flags
 # ----------------------------------------------------------------------------
 TW_THEME := portrait_hdpi
 TW_DEVICE_VERSION := begonia-dynd
-# TW_SCREEN_BLANK_ON_BOOT triggers another MTK blank/unblank at startup; the
-# known-working begonia tree keeps it on, so leave it, but if the splash hangs
-# this is the second thing to try flipping to false.
-TW_SCREEN_BLANK_ON_BOOT := true
+# The PBRP GUI performs an MTK framebuffer blank/unblank when this is true;
+# that wait can keep a device on the splash image. Keep it disabled.
+TW_SCREEN_BLANK_ON_BOOT := false
 TW_Y_OFFSET := 80
 TW_H_OFFSET := -80
 TW_FRAMERATE := 60
@@ -297,10 +271,18 @@ TW_MAX_BRIGHTNESS := 2047
 TW_BRIGHTNESS_PATH := "/sys/class/leds/lcd-backlight/brightness"
 TW_CUSTOM_CPU_TEMP_PATH := /sys/devices/virtual/thermal/thermal_zone4/temp
 TW_INPUT_BLACKLIST := "hbtp_vm"
-TW_PREPARE_DATA_MEDIA_EARLY := true
+ifeq ($(PBRP_ENABLE_CRYPTO),true)
+    TW_PREPARE_DATA_MEDIA_EARLY := true
+else
+    TW_PREPARE_DATA_MEDIA_EARLY := false
+endif
 TW_HAS_MTP := true
 TW_HAS_EDL_MODE := true
-RECOVERY_SDCARD_ON_DATA := true
+ifeq ($(PBRP_ENABLE_CRYPTO),true)
+    RECOVERY_SDCARD_ON_DATA := true
+else
+    RECOVERY_SDCARD_ON_DATA := false
+endif
 BOARD_BUILD_SYSTEM_ROOT_IMAGE := false
 TARGET_USE_CUSTOM_LUN_FILE_PATH := /config/usb_gadget/g1/functions/mass_storage.0/lun.%d/file
 

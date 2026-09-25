@@ -40,10 +40,12 @@ on boot
     chown system system /sys/bus/platform/devices/utos/unload_ut_drv
     chown system system /sys/bus/platform/devices/utos/notify_ree_dci_handler
 
-# TEE shared-memory directory layout. Requires /data to be mounted, so this is
-# moved onto post-fs-data instead of load_persist_props_action which runs far
-# too early in recovery to be useful (and spams mkdir failures).
-on post-fs-data
+# TEE shared-memory layout. PBRP can start teei_daemon as soon as
+# hwservicemanager is ready, which is before post-fs-data. Create every parent
+# explicitly because Android init's mkdir is not recursive.
+on init
+    mkdir /data 0755 root root
+    mkdir /data/vendor 0771 root system
     mkdir /data/vendor/thh 0755 system system
     mkdir /data/vendor/thh/system 0755 system system
     mkdir /data/vendor/thh/ta 0755 system system
@@ -67,7 +69,6 @@ on post-fs-data
     mkdir /data/vendor/thh/tee_0E 0755 system system
     mkdir /data/vendor/thh/tee_0F 0755 system system
     mkdir /data/vendor/key_provisioning 0771 system system
-    restorecon_recursive /data/vendor/thh
 
 # Persist / RPMB directories used by the TEE storage proxy
 on post-fs

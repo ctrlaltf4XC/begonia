@@ -13,8 +13,8 @@ on:
           - static
           - dynamic
         default: safe
-      beanpod_crypto:
-        description: 'Relink beanpod keymaster stack into recovery (wrapped-key FBE)'
+      crypto:
+        description: 'Enable the vendor MicroTrust FBE/keymaster stack'
         type: boolean
         default: false
 
@@ -25,13 +25,10 @@ jobs:
     env:
       ALLOW_MISSING_DEPENDENCIES: true
       LC_ALL: C
-      # workflow_dispatch inputs are empty for push events, so fall back to
-      # "safe": that variant is an exact copy of the known-working begonia
-      # tree's fstab and is the baseline for bisecting the splash hang.
-      # Previously the workflow referenced $INPUT_VARIANT, which was never
-      # declared as an input and therefore always resolved to "static".
+      # Push events have no workflow_dispatch inputs. The default is the
+      # no-crypto safe image so a broken vendor TEE cannot strand PBRP at splash.
       PBRP_VARIANT: ${{ inputs.variant || 'safe' }}
-      BEANPOD_CRYPTO: ${{ inputs.beanpod_crypto && 'true' || 'false' }}
+      PBRP_ENABLE_CRYPTO: ${{ inputs.crypto && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,7 +41,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
             git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
-            lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
+            lib32z1-dev libelf-dev liblz4-tool libncurses5 lib32ncurses5-dev \
             libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
             rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 \
             python-is-python3 openjdk-11-jdk-headless
@@ -84,42 +81,48 @@ jobs:
           rm -rf device/xiaomi/begonia
           mkdir -p device/xiaomi
           cp -rp pbrp_device_tree device/xiaomi/begonia
-          # Remove libshim_beanpod from the copied tree to avoid duplicate definition
-          # since we want to use the one from pbrp_device_tree/libshim_beanpod
-          rm -rf device/xiaomi/begonia/libshim_beanpod
+          test -f device/xiaomi/begonia/libshim_beanpod/Android.mk
 
       - name: Select fstab variant
         id: fstab
         run: |
-          # PBRP_VARIANT comes from the workflow_dispatch `variant` input
-          # (job-level env, defaults to "static" on push builds).
-          VARIANT="${PBRP_VARIANT:-static}"
-          FSTAB="pbrp_device_tree/variants/recovery.fstab.$VARIANT"
-          if [ ! -f "$FSTAB" ]; then
-            echo "::error::unknown variant '$VARIANT' (no $FSTAB)"
-            echo "available variants:"
-            ls -1 pbrp_device_tree/variants/
+          set -euo pipefail
+          VARIANT="${PBRP_VARIANT:-safe}"
+          CRYPTO="${PBRP_ENABLE_CRYPTO:-false}"
+          if [ "$CRYPTO" != true ] && [ "$VARIANT" != safe ]; then
+            echo "::error::no-crypto builds support only the safe variant"
             exit 1
           fi
+          if [ "$CRYPTO" = true ] && [ "$VARIANT" = safe ]; then
+            echo "::error::crypto builds require the static or dynamic variant"
+            exit 1
+          fi
+          FSTAB="pbrp_device_tree/variants/recovery.fstab.$VARIANT"
+          test -f "$FSTAB"
           echo "variant=$VARIANT" >> "$GITHUB_OUTPUT"
-          echo "Selected fstab variant: $VARIANT"
-          ls -la "$FSTAB"
+          echo "crypto=$CRYPTO" >> "$GITHUB_OUTPUT"
+          echo "Selected fstab variant: $VARIANT (crypto=$CRYPTO)"
 
       - name: Setup fstab
         run: |
+          set -euo pipefail
           VARIANT="${{ steps.fstab.outputs.variant }}"
           mkdir -p device/xiaomi/begonia/recovery/root/system/etc
-          cp pbrp_device_tree/variants/recovery.fstab.$VARIANT device/xiaomi/begonia/recovery/root/system/etc/recovery.fstab
+          cp "pbrp_device_tree/variants/recovery.fstab.$VARIANT" \
+             device/xiaomi/begonia/recovery/root/system/etc/recovery.fstab
           echo "--- installed recovery.fstab ---"
           grep -vE '^\s*#|^\s*$' device/xiaomi/begonia/recovery/root/system/etc/recovery.fstab
 
       - name: Fetch decryption blobs
         run: |
-          bash pbrp_device_tree/fetch-decryption-blobs.sh
+          if [ "${PBRP_ENABLE_CRYPTO:-false}" = true ]; then
+            bash pbrp_device_tree/fetch-decryption-blobs.sh
+          else
+            echo "Skipping proprietary TEE blobs for no-crypto safe build"
+          fi
 
       - name: Apply patches
-        run: |
-          bash pbrp_device_tree/patches/apply-patches.sh
+        run: ANDROID_BUILD_TOP="$GITHUB_WORKSPACE" bash pbrp_device_tree/patches/apply-patches.sh
 
       - name: Setup build
         run: |
@@ -137,37 +140,35 @@ jobs:
         run: |
           set -euo pipefail
           OUT_DIR=out/target/product/begonia
-          RECOVERY_IMG=$OUT_DIR/recovery.img
-          # ${VARIANT} was previously unset here (it only existed in the fstab
-          # steps), so the artifact came out as "PBRP-begonia-.zip".
-          VARIANT="${PBRP_VARIANT:-static}"
-          if [ -f "$RECOVERY_IMG" ]; then
-            mkdir -p flashable_zip/META-INF/com/google/android
-            cp "$RECOVERY_IMG" flashable_zip/
-            # Create minimal updater-script
-            echo 'ui_print("Installing PBRP recovery...");' > flashable_zip/META-INF/com/google/android/updater-script
-            echo 'package_extract_file("recovery.img", "/dev/block/bootdevice/by-name/recovery");' >> flashable_zip/META-INF/com/google/android/updater-script
-            echo 'ui_print("Done!");' >> flashable_zip/META-INF/com/google/android/updater-script
-            # Create dummy update-binary
-            echo '#!/system/bin/sh' > flashable_zip/META-INF/com/google/android/update-binary
-            chmod +x flashable_zip/META-INF/com/google/android/update-binary
-            (cd flashable_zip && zip -r "../PBRP-begonia-${VARIANT}.zip" .)
-            mv "PBRP-begonia-${VARIANT}.zip" "$OUT_DIR/"
-            echo "Flashable zip created: $OUT_DIR/PBRP-begonia-${VARIANT}.zip"
-          else
-            echo "ERROR: recovery.img not found in $OUT_DIR"
-            exit 1
+          RECOVERY_IMG="$OUT_DIR/recovery.img"
+          VARIANT="${PBRP_VARIANT:-safe}"
+          CRYPTO_LABEL=nocrypto
+          if [ "${PBRP_ENABLE_CRYPTO:-false}" = true ]; then
+            CRYPTO_LABEL=crypto
           fi
+          test -f "$RECOVERY_IMG"
+          mkdir -p flashable_zip/META-INF/com/google/android
+          cp "$RECOVERY_IMG" flashable_zip/
+          echo 'ui_print("Installing PBRP recovery...");' > flashable_zip/META-INF/com/google/android/updater-script
+          echo 'package_extract_file("recovery.img", "/dev/block/bootdevice/by-name/recovery");' >> flashable_zip/META-INF/com/google/android/updater-script
+          echo 'ui_print("Done!");' >> flashable_zip/META-INF/com/google/android/updater-script
+          printf '#!/system/bin/sh\n' > flashable_zip/META-INF/com/google/android/update-binary
+          chmod +x flashable_zip/META-INF/com/google/android/update-binary
+          ZIP_NAME="PBRP-begonia-${VARIANT}-${CRYPTO_LABEL}.zip"
+          (cd flashable_zip && zip -r "../$ZIP_NAME" .)
+          mv "$ZIP_NAME" "$OUT_DIR/"
+          echo "Flashable zip created: $OUT_DIR/$ZIP_NAME"
 
       - name: Write build info
         if: success()
         run: |
+          set -euo pipefail
           {
             echo "PBRP begonia build"
             echo "commit:    $GITHUB_SHA"
             echo "branch:    $GITHUB_REF_NAME"
-            echo "variant:   ${PBRP_VARIANT:-static}"
-            echo "beanpod:   ${BEANPOD_CRYPTO:-false}"
+            echo "variant:   ${PBRP_VARIANT:-safe}"
+            echo "crypto:    ${PBRP_ENABLE_CRYPTO:-false}"
             echo "date:      $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo
             echo "--- recovery.fstab baked into the image ---"
@@ -179,9 +180,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          # Variant in the artifact name so a static and a dynamic build no
-          # longer overwrite/confuse each other.
-          name: PBRP-begonia-${{ steps.fstab.outputs.variant }}-${{ env.BEANPOD_CRYPTO == 'true' && 'beanpod' || 'nobeanpod' }}
+          name: PBRP-begonia-${{ steps.fstab.outputs.variant }}-${{ env.PBRP_ENABLE_CRYPTO == 'true' && 'crypto' || 'nocrypto' }}
           path: |
             out/target/product/begonia/recovery.img
             out/target/product/begonia/PBRP-begonia-*.zip
