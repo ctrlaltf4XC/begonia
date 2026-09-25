@@ -224,14 +224,11 @@ ifeq ($(PBRP_ENABLE_CRYPTO),true)
         TW_USE_FSCRYPT_POLICY := 1
     endif
 else
-    # PBRP's Android.mk uses ifneq(TW_INCLUDE_CRYPTO,), so an explicit
-    # "false" would still pull in keystore/vold modules. Leave these undefined
-    # to remove the crypto build path completely.
-    undefine TW_INCLUDE_CRYPTO
-    undefine TW_INCLUDE_CRYPTO_FBE
-    undefine TW_INCLUDE_FBE_METADATA_DECRYPT
-    undefine TW_CRYPTO_SYSTEM_USER
-    undefine TW_USE_FSCRYPT_POLICY
+    # Intentionally empty. PBRP's Android.mk uses ifneq(TW_INCLUDE_CRYPTO,), so
+    # assigning "false" would still pull keystore/vold into the build; simply not
+    # assigning the TW_*CRYPTO* vars above leaves them undefined, which is what
+    # keeps the crypto path out. Don't restore `undefine` here to spell that out
+    # -- make rejects it at this line with "missing separator" under dumpvars.
 endif
 
 # ----------------------------------------------------------------------------
