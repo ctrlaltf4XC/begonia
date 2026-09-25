@@ -145,24 +145,37 @@ BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE := 1610612736
 # physical partitions. These values match the layout used by the maintained
 # begonia ROM trees, so recovery can map, resize and flash them correctly.
 # ----------------------------------------------------------------------------
-SSI_PARTITIONS := product system system_ext
-TREBLE_PARTITIONS := odm vendor
-ALL_PARTITIONS := $(SSI_PARTITIONS) $(TREBLE_PARTITIONS)
+# Every dynamic partition is ext4 in recovery's view.
+# Written out explicitly: dumpvars parses this file in a stricter context than a
+# bare `include`, and the $(eval) these used to be generated blew up there with
+# "missing separator" on the line after the loop. Don't fold this back into a
+# $(foreach)/$(eval) loop -- plain assignments parse everywhere.
+BOARD_PRODUCTIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_SYSTEM_EXTIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 
-# Every dynamic partition is ext4 in recovery's view
-$(foreach p, $(call to-upper, $(ALL_PARTITIONS)), \
-    $(eval BOARD_$(p)IMAGE_FILE_SYSTEM_TYPE := ext4) \
-    $(eval TARGET_COPY_OUT_$(p) := $(call to-lower, $(p))))
+TARGET_COPY_OUT_product := product
+TARGET_COPY_OUT_system := system
+TARGET_COPY_OUT_system_ext := system_ext
+TARGET_COPY_OUT_odm := odm
+TARGET_COPY_OUT_vendor := vendor
 
-$(foreach p, $(call to-upper, $(SSI_PARTITIONS)), \
-    $(eval BOARD_$(p)IMAGE_EXTFS_INODE_COUNT := -1))
-$(foreach p, $(call to-upper, $(TREBLE_PARTITIONS)), \
-    $(eval BOARD_$(p)IMAGE_EXTFS_INODE_COUNT := 4096))
+BOARD_PRODUCTIMAGE_EXTFS_INODE_COUNT := -1
+BOARD_SYSTEMIMAGE_EXTFS_INODE_COUNT := -1
+BOARD_SYSTEM_EXTIMAGE_EXTFS_INODE_COUNT := -1
+BOARD_ODMIMAGE_EXTFS_INODE_COUNT := 4096
+BOARD_VENDORIMAGE_EXTFS_INODE_COUNT := 4096
 
-$(foreach p, $(call to-upper, $(SSI_PARTITIONS)), \
-    $(eval BOARD_$(p)IMAGE_PARTITION_RESERVED_SIZE := 83886080)) # 80 MB
-$(foreach p, $(call to-upper, $(TREBLE_PARTITIONS)), \
-    $(eval BOARD_$(p)IMAGE_PARTITION_RESERVED_SIZE := 41943040)) # 40 MB
+# 80 MB reserved on the non-treble dynamic partitions
+BOARD_PRODUCTIMAGE_PARTITION_RESERVED_SIZE := 83886080
+BOARD_SYSTEMIMAGE_PARTITION_RESERVED_SIZE := 83886080
+BOARD_SYSTEM_EXTIMAGE_PARTITION_RESERVED_SIZE := 83886080
+
+# 40 MB reserved on the treble dynamic partitions
+BOARD_ODMIMAGE_PARTITION_RESERVED_SIZE := 41943040
+BOARD_VENDORIMAGE_PARTITION_RESERVED_SIZE := 41943040
 
 BOARD_SUPER_PARTITION_BLOCK_DEVICES := vendor system
 BOARD_SUPER_PARTITION_METADATA_DEVICE := system
