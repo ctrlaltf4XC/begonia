@@ -156,11 +156,14 @@ BOARD_SYSTEM_EXTIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 
-TARGET_COPY_OUT_product := product
-TARGET_COPY_OUT_system := system
-TARGET_COPY_OUT_system_ext := system_ext
-TARGET_COPY_OUT_odm := odm
-TARGET_COPY_OUT_vendor := vendor
+# AOSP names these with the partition uppercased and the value lowercased --
+# board_config.mk rejects e.g. TARGET_COPY_OUT_vendor when BOARD_USES_VENDOR_IMAGE
+# is set, so the name case is load-bearing here.
+TARGET_COPY_OUT_PRODUCT := product
+TARGET_COPY_OUT_SYSTEM := system
+TARGET_COPY_OUT_SYSTEM_EXT := system_ext
+TARGET_COPY_OUT_ODM := odm
+TARGET_COPY_OUT_VENDOR := vendor
 
 BOARD_PRODUCTIMAGE_EXTFS_INODE_COUNT := -1
 BOARD_SYSTEMIMAGE_EXTFS_INODE_COUNT := -1
