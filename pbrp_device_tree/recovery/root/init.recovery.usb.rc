@@ -1,17 +1,16 @@
 # USB configuration for recovery on begonia (MT6785)
 #
-# The kernel hands us androidboot.usbconfigfs=true, so the gadget is built
-# through /config/usb_gadget. The legacy /sys/class/android_usb/android0
-# ffs node does not exist on A16 -- writing to it is a silent no-op, which is
-# why adb never came up. Set VID/PID before the gadget is enabled: once UDC is
-# bound the descriptors are latched and writes are rejected.
+# Uses configfs gadget (androidboot.usbconfigfs=true) so adb / mtp / mass
+# storage all work from recovery.
 
 on init
     mkdir /config/usb_gadget 0770 root root
 
 on boot
-    write /sys/class/leds/lcd-backlight/brightness 1000
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/leds/lcd-backlight/brightness "1000"
 
+# TWRP sets these itself; we just make sure the gadget path exists.
 on property:sys.usb.config=mtp,adb
     write /config/usb_gadget/g1/idVendor 0x2717
-    write /config/usb_gadget/g1/idProduct 0xff48
+    write /config/usb_gadget/g1/idProduct 0x2717

@@ -7,25 +7,8 @@
 #
 # Use variant=static or dynamic with PBRP_ENABLE_CRYPTO=true only when the
 # hardware-backed decryption stack has been tested for the target ROM.
-#
-# Layout (verified on-device against a working TWRP, Android 16 QPR2):
-# begonia has no physical "super" partition. The super lives INSIDE the
-# physical system partition, so by-name/system is the super *container* and
-# is not a mountable filesystem (all zeros, no ext4 magic at offset 1080).
-# Only by-name/vendor carries a real ext4 superblock. The mountable
-# filesystems are the five dynamic (dm) devices /dev/block/mapper/*, which is
-# what the ROM's own fstab mounts using the "logical" fs_mgr flag.
-#
-# Pointing these entries at by-name/* makes /system fail to mount outright,
-# which is what left recovery wedged on the splash. Keep them "logical".
-#
-# <src>            <mnt_point>    <type>  <mnt_flags>   <fs_mgr_flags>
-# ---------------------------------------------------------------------------
-system             /system       ext4    ro,barrier=1  wait,logical
-system_ext         /system_ext   ext4    ro,barrier=1  wait,logical
-product            /product      ext4    ro,barrier=1  wait,logical
-vendor             /vendor       ext4    ro,barrier=1  wait,logical
-odm                /odm          ext4    ro,barrier=1  wait,logical
 
+/dev/block/platform/bootdevice/by-name/system    /system               ext4     ro                                                              wait,avb=vbmeta,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
+/dev/block/platform/bootdevice/by-name/vendor    /vendor               ext4     ro                                                              wait,avb,first_stage_mount
 /dev/block/platform/bootdevice/by-name/misc      /misc                 emmc     defaults                                                        defaults
-/dev/block/platform/bootdevice/by-name/metadata  /metadata             ext4     noatime,nosuid,nodev,discard                                    wait,check,formattable
+/dev/block/platform/bootdevice/by-name/metadata  /metadata             ext4     noatime,nosuid,nodev,discard                                    wait,check,formattable,first_stage_mount
