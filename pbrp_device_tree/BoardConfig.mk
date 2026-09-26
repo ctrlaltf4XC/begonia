@@ -63,11 +63,13 @@ BOARD_HAS_MTK_HARDWARE := true
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2
 BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
 BOARD_KERNEL_CMDLINE += androidboot.usbconfigfs=true
-# Retrofit super is meaningful only for a dynamic build. Do not force the
-# stock/static recovery into lptools/super setup during normal startup.
-ifeq ($(PBRP_VARIANT),dynamic)
-    BOARD_KERNEL_CMDLINE += androidboot.super_partition=system
-endif
+# begonia is a retrofit-dynamic device: super metadata lives in the physical
+# by-name/system extent and the five mountable partitions are dm-0..dm-4.
+# The bootloader passes this on the working TWRP image, and liblp will not
+# resolve the logical partitions without it -- recovery then falls back to
+# mounting by-name/system, which is the super container and not a filesystem.
+# Required for every variant on this device.
+BOARD_KERNEL_CMDLINE += androidboot.super_partition=system
 # A fatal init error should leave recovery rather than loop on its splash.
 BOARD_KERNEL_CMDLINE += androidboot.init_fatal_reboot_target=bootloader
 
