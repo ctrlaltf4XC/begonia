@@ -31,12 +31,9 @@ PM="bootable/recovery/partitionmanager.cpp"
 [ -f "$PM" ] || { echo "ERROR: missing $PM"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# 1. Retrofit super detection
+# 1. Retrofit super detection (dynamic builds only)
 # ---------------------------------------------------------------------------
-# begonia has no physical by-name/super node on any variant, so this is always
-# required: without it Get_Super_Partition() returns /dev/block/by-name/super,
-# which does not exist, and logical partitions never resolve.
-if true; then
+if [ "$VARIANT" = dynamic ]; then
     say "1. Retrofit super support in partitionmanager"
     if marker_present "BEGONIA_RETROFIT_SUPER" "$PM"; then
         echo "already applied"
@@ -77,6 +74,8 @@ p.write_text(s)
 print("  + patched Get_Super_Partition() for retrofit super")
 PY
     fi
+else
+    say "1. Retrofit super support skipped (variant=$VARIANT)"
 fi
 
 # ---------------------------------------------------------------------------

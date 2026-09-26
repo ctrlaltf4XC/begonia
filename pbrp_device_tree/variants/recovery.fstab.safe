@@ -1,25 +1,14 @@
 # Safe startup fstab for begonia.
 #
-# begonia is retrofit-dynamic: the five mountable partitions are dm-0..dm-4,
-# carved out of the super metadata stored in the physical by-name/system
-# extent. Pointing /system at by-name/system can never work -- that block is
-# the super container (zeros at the ext4 superblock offset), not a filesystem.
+# PBRP draws its splash before processing encrypted storage. The MicroTrust
+# metadata-FBE path can block in fscrypt_mount_metadata_encrypted() when the
+# vendor TEE/HAL is unavailable. This diagnostic image intentionally omits
+# /data and all fscrypt options; it does not wipe or modify user data.
 #
-# These logical entries are what the working TWRP resolves, via
-# androidboot.super_partition=system in BoardConfig.mk -> liblp -> dm devices.
-# Do NOT mix by-name "system"/"vendor" entries in here.
-#
-# This diagnostic image still omits /data and all fscrypt options: the
-# MicroTrust metadata-FBE path can block in fscrypt_mount_metadata_encrypted()
-# when the vendor TEE/HAL is unavailable. It does not wipe or modify user data.
-#
-# <src>            <mnt_point>    <type>  <mnt_flags>   <fs_mgr_flags>
-# ---------------------------------------------------------------------------
-system             /system       ext4    ro            wait,logical,first_stage_mount
-system_ext         /system_ext   ext4    ro            wait,logical,first_stage_mount
-product            /product      ext4    ro            wait,logical,first_stage_mount
-vendor             /vendor       ext4    ro            wait,logical,first_stage_mount
-odm                /odm          ext4    ro            wait,logical,first_stage_mount
+# Use variant=static or dynamic with PBRP_ENABLE_CRYPTO=true only when the
+# hardware-backed decryption stack has been tested for the target ROM.
 
-/dev/block/platform/bootdevice/by-name/misc       /misc      emmc    defaults                                                        defaults
-/dev/block/platform/bootdevice/by-name/metadata   /metadata  ext4    noatime,nosuid,nodev,discard                                    wait,check,formattable,first_stage_mount
+/dev/block/platform/bootdevice/by-name/system    /system               ext4     ro                                                              wait,avb=vbmeta,first_stage_mount,avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey
+/dev/block/platform/bootdevice/by-name/vendor    /vendor               ext4     ro                                                              wait,avb,first_stage_mount
+/dev/block/platform/bootdevice/by-name/misc      /misc                 emmc     defaults                                                        defaults
+/dev/block/platform/bootdevice/by-name/metadata  /metadata             ext4     noatime,nosuid,nodev,discard                                    wait,check,formattable,first_stage_mount
